@@ -293,50 +293,86 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
   <script src="engine.js"></script>
   <script>
-    // Load games on startup and tab switches
-  async function loadGames() {
-    try {
-      const res = await fetch('/api/games');
-      let games = await res.json();
-      
-      // Fallback starter games if the database table is empty
-      if (!games || games.length === 0) {
-        games = [
-          { id: 1, title: "Lava Obby Rush", creator: "DynoBuild", thumbColor: "#ef4444", visits: 142 },
-          { id: 2, title: "Classic Sandbox", creator: "BuilderPro", thumbColor: "#00a2ff", visits: 89 }
-        ];
-      }
-  
-      const homeGrid = document.getElementById('home-game-grid');
-      const discoverGrid = document.getElementById('discover-game-grid');
-      
-      let html = '';
-      games.forEach(g => {
-        html += `
-          <div class="game-card" onclick="if(typeof joinGame === 'function') { joinGame(${g.id}); } else { alert('Launching ${g.title}...'); }">
-            <div class="game-thumb" style="background:${g.thumbColor || '#00a2ff'}">🧱 ${g.title}</div>
-            <div class="game-info">
-              <div class="game-title">${g.title}</div>
-              <div class="game-creator">By ${g.creator || 'DynoBuild'}</div>
-              <div class="game-stats">
-                <span>👁️ ${g.visits || 0} visits</span>
+    // Game loading and publishing logic
+    async function loadGames() {
+      try {
+        const res = await fetch('/api/games');
+        let games = await res.json();
+        
+        if (!games || games.length === 0) {
+          games = [
+            { id: 1, title: "Lava Obby Rush", creator: "DynoBuild", thumbColor: "#ef4444", visits: 142 },
+            { id: 2, title: "Classic Sandbox", creator: "BuilderPro", thumbColor: "#00a2ff", visits: 89 }
+          ];
+        }
+
+        const homeGrid = document.getElementById('home-game-grid');
+        const discoverGrid = document.getElementById('discover-game-grid');
+        
+        let html = '';
+        games.forEach(g => {
+          html += `
+            <div class="game-card" onclick="if(typeof joinGame === 'function') { joinGame(${g.id}); } else { alert('Launching ${g.title}...'); }">
+              <div class="game-thumb" style="background:${g.thumbColor || '#00a2ff'}">🧱 ${g.title}</div>
+              <div class="game-info">
+                <div class="game-title">${g.title}</div>
+                <div class="game-creator">By ${g.creator || 'DynoBuild'}</div>
+                <div class="game-stats">
+                  <span>👁️ ${g.visits || 0} visits</span>
+                </div>
               </div>
             </div>
-          </div>
-        `;
-      });
-  
-      if (homeGrid) homeGrid.innerHTML = html;
-      if (discoverGrid) discoverGrid.innerHTML = html;
-    } catch (err) {
-      console.error('Failed to load games:', err);
-    }
-  }
+          `;
+        });
 
-    // Call loadGames when page initializes
+        if (homeGrid) homeGrid.innerHTML = html;
+        if (discoverGrid) discoverGrid.innerHTML = html;
+      } catch (err) {
+        console.error('Failed to load games:', err);
+      }
+    }
+
     window.addEventListener('DOMContentLoaded', () => {
       loadGames();
     });
+
+    function openPublishModal() {
+      const titleInput = document.getElementById('pub-title');
+      const studioTitle = document.getElementById('gameTitle');
+      if (titleInput && studioTitle) {
+        titleInput.value = studioTitle.value || 'My Dyno World';
+      }
+      document.getElementById('publish-modal').style.display = 'flex';
+    }
+
+    async function publishGame() {
+      const title = document.getElementById('pub-title').value.trim() || 'My Dyno World';
+      const thumbColor = document.getElementById('pub-color').value || '#00a2ff';
+      let currentUser = JSON.parse(localStorage.getItem('dyno_user') || '{"username": "Builder"}');
+      const creator = currentUser.username || 'Builder';
+      
+      const blocks = window.studioBlocks || [];
+      const customCode = document.getElementById('studio-script-editor')?.value || '';
+
+      try {
+        const res = await fetch('/api/games', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, creator, blocks, customCode, thumbColor })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('Game published successfully!');
+          document.getElementById('publish-modal').style.display = 'none';
+          loadGames();
+        } else {
+          alert(data.error || 'Failed to publish game.');
+        }
+      } catch (err) {
+        console.error('Publish error:', err);
+        alert('Could not connect to server.');
+      }
+    }
 
     function switchTab(tabName) {
       document.getElementById('home-view').style.display = 'none';
