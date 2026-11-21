@@ -54,14 +54,14 @@
     .game-creator { font-size: 0.8rem; color: var(--text-muted); }
     .game-stats { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 4px; }
 
-    /* AVATAR CATALOG STYLES */
+    /* OG AVATAR CATALOG STYLES WITH HATS & ACCESSORIES */
     .avatar-builder-grid { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
     .avatar-preview-box { background: #090d16; border: 1px solid var(--border-dark); border-radius: 8px; height: 320px; display: flex; align-items: center; justify-content: center; position: relative; }
     .customizer-options { display: flex; flex-direction: column; gap: 12px; background: var(--card-dark); padding: 16px; border-radius: 8px; border: 1px solid var(--border-dark); }
     .color-picker-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem; }
-    .color-picker-row input { height: 35px; width: 60px; cursor: pointer; background: transparent; border: none; }
+    .color-picker-row input, .customizer-options select { height: 35px; width: 140px; background: #0f172a; border: 1px solid var(--border-dark); color: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 
-    /* ROBLOX STUDIO IDE LAYOUT */
+    /* ROBLOX STUDIO STYLE IDE LAYOUT */
     #tab-studio { display: none; height: 100%; flex-direction: column; }
     .studio-ribbon { background: #1e293b; border-bottom: 1px solid var(--border-dark); padding: 8px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .studio-ribbon .divider { width: 1px; height: 24px; background: var(--border-dark); margin: 0 4px; }
@@ -155,16 +155,33 @@
         <div class="games-grid" id="all-games-grid"></div>
       </div>
 
-      <!-- AVATAR CATALOG TAB -->
+      <!-- AVATAR CATALOG & CUSTOMIZER TAB -->
       <div id="tab-catalog" class="page-pad" style="display:none;">
-        <h2>Avatar Customizer</h2>
-        <p style="color:var(--text-muted); font-size:0.9rem;">Customize your block-man character colors and style!</p>
+        <h2>OG Avatar Customizer</h2>
+        <p style="color:var(--text-muted); font-size:0.9rem;">Customize your block character with classic hats, faces, and clothing colors!</p>
         <div class="avatar-builder-grid">
           <div class="avatar-preview-box" id="avatar-preview-container"></div>
           <div class="customizer-options">
             <div class="color-picker-row"><label>Skin Tone</label><input type="color" id="avatar-skin" value="#fde047" onchange="updateAvatarPreview()"></div>
             <div class="color-picker-row"><label>Shirt Color</label><input type="color" id="avatar-shirt" value="#3b82f6" onchange="updateAvatarPreview()"></div>
             <div class="color-picker-row"><label>Pants Color</label><input type="color" id="avatar-pants" value="#16a34a" onchange="updateAvatarPreview()"></div>
+            <div class="color-picker-row">
+              <label>Hat / Hair</label>
+              <select id="avatar-hat" onchange="updateAvatarPreview()">
+                <option value="none">None</option>
+                <option value="tophat">Classic Top Hat</option>
+                <option value="cap">Retro Baseball Cap</option>
+                <option value="crown">King Crown</option>
+              </select>
+            </div>
+            <div class="color-picker-row">
+              <label>Face Style</label>
+              <select id="avatar-face" onchange="updateAvatarPreview()">
+                <option value="smile">Classic Smile</option>
+                <option value="grrin">Grin</option>
+                <option value="cool">Cool Shades</option>
+              </select>
+            </div>
             <button onclick="saveAvatar()" style="margin-top: 10px; background:#16a34a; color:white;">Save Avatar</button>
           </div>
         </div>
@@ -435,7 +452,7 @@
       openModal('game-info-modal');
     }
 
-    // --- AVATAR BUILDER CATALOG ---
+    // --- AVATAR BUILDER CATALOG WITH HATS & ACCESSORIES ---
     let avatarScene, avatarCamera, avatarRenderer, avatarGroup;
     function initAvatarPreview() {
       const container = document.getElementById('avatar-preview-container');
@@ -457,6 +474,8 @@
         document.getElementById('avatar-skin').value = currentUser.avatar.skin || '#fde047';
         document.getElementById('avatar-shirt').value = currentUser.avatar.shirt || '#3b82f6';
         document.getElementById('avatar-pants').value = currentUser.avatar.pants || '#16a34a';
+        document.getElementById('avatar-hat').value = currentUser.avatar.hat || 'none';
+        document.getElementById('avatar-face').value = currentUser.avatar.face || 'smile';
       }
       buildAvatarMesh();
 
@@ -468,40 +487,62 @@
       anim();
     }
 
-    function buildAvatarMesh() {
-      if (avatarGroup) avatarScene.remove(avatarGroup);
-      avatarGroup = new THREE.Group();
-
-      const skinColor = document.getElementById('avatar-skin').value;
-      const shirtColor = document.getElementById('avatar-shirt').value;
-      const pantsColor = document.getElementById('avatar-pants').value;
+    function createBlockManCharacter(avatarConfig) {
+      const group = new THREE.Group();
+      const skin = avatarConfig?.skin || '#fde047';
+      const shirt = avatarConfig?.shirt || '#3b82f6';
+      const pants = avatarConfig?.pants || '#16a34a';
+      const hat = avatarConfig?.hat || 'none';
 
       // Head
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skinColor}));
-      head.position.y = 1.6;
-      avatarGroup.add(head);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skin}));
+      head.position.y = 1.6; group.add(head);
+
+      // Hat accessory
+      if (hat === 'tophat') {
+        const brim = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 1.2), new THREE.MeshLambertMaterial({color: 0x111111}));
+        brim.position.set(0, 2.05, 0); group.add(brim);
+        const cyl = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.7), new THREE.MeshLambertMaterial({color: 0x111111}));
+        cyl.position.set(0, 2.5, 0); group.add(cyl);
+      } else if (hat === 'cap') {
+        const cap = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.3, 0.85), new THREE.MeshLambertMaterial({color: 0xef4444}));
+        cap.position.set(0, 2.1, 0); group.add(cap);
+        const brim = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.4), new THREE.MeshLambertMaterial({color: 0xef4444}));
+        brim.position.set(0, 2.0, -0.4); group.add(brim);
+      } else if (hat === 'crown') {
+        const crown = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.4, 0.82), new THREE.MeshLambertMaterial({color: 0xfacc15}));
+        crown.position.set(0, 2.2, 0); group.add(crown);
+      }
 
       // Torso
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), new THREE.MeshLambertMaterial({color: shirtColor}));
-      torso.position.y = 0.7;
-      avatarGroup.add(torso);
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), new THREE.MeshLambertMaterial({color: shirt}));
+      torso.position.y = 0.7; group.add(torso);
 
-      // Left Arm & Right Arm
+      // Arms
       const armGeo = new THREE.BoxGeometry(0.35, 1.1, 0.4);
-      const lArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skinColor}));
-      lArm.position.set(-0.7, 0.7, 0);
-      const rArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skinColor}));
-      rArm.position.set(0.7, 0.7, 0);
-      avatarGroup.add(lArm); avatarGroup.add(rArm);
+      const lArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); lArm.position.set(-0.7, 0.7, 0);
+      const rArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); rArm.position.set(0.7, 0.7, 0);
+      group.add(lArm); group.add(rArm);
 
-      // Left Leg & Right Leg
+      // Legs
       const legGeo = new THREE.BoxGeometry(0.42, 1.1, 0.5);
-      const lLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pantsColor}));
-      lLeg.position.set(-0.25, -0.45, 0);
-      const rLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pantsColor}));
-      rLeg.position.set(0.25, -0.45, 0);
-      avatarGroup.add(lLeg); avatarGroup.add(rLeg);
+      const lLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); lLeg.position.set(-0.25, -0.45, 0);
+      const rLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); rLeg.position.set(0.25, -0.45, 0);
+      group.add(lLeg); group.add(rLeg);
 
+      return group;
+    }
+
+    function buildAvatarMesh() {
+      if (avatarGroup) avatarScene.remove(avatarGroup);
+      const config = {
+        skin: document.getElementById('avatar-skin').value,
+        shirt: document.getElementById('avatar-shirt').value,
+        pants: document.getElementById('avatar-pants').value,
+        hat: document.getElementById('avatar-hat').value,
+        face: document.getElementById('avatar-face').value
+      };
+      avatarGroup = createBlockManCharacter(config);
       avatarGroup.position.y = -0.3;
       avatarScene.add(avatarGroup);
     }
@@ -513,7 +554,9 @@
       const avatar = {
         skin: document.getElementById('avatar-skin').value,
         shirt: document.getElementById('avatar-shirt').value,
-        pants: document.getElementById('avatar-pants').value
+        pants: document.getElementById('avatar-pants').value,
+        hat: document.getElementById('avatar-hat').value,
+        face: document.getElementById('avatar-face').value
       };
       const res = await fetch('/api/avatar', {
         method: 'POST',
@@ -578,7 +621,7 @@
       if (b === 'admin') return '<span style="background:#ef4444; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">🛡️ Admin</span>';
       if (b === 'og') return '<span style="background:#f59e0b; color:#0f172a; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">⭐ OG Player</span>';
       if (b === 'developer') return '<span style="background:#8b5cf6; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">🚀 Developer (1K+ Visits)</span>';
-      return `<span style="background:#334155; color:white; padding:5px 10px; border-radius:6px; font-size:0.85rem;">${b}</span>`;
+      return `<span style="background:#334155; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">${b}</span>`;
     }
 
     function renderProfile(user) {
@@ -793,31 +836,6 @@
     }
 
     // --- MULTIPLAYER PLAY VIEWPORT WITH MOUSE LOOK & BLOCK-MAN ---
-    function createBlockManCharacter(avatarConfig) {
-      const group = new THREE.Group();
-      const skin = avatarConfig?.skin || '#fde047';
-      const shirt = avatarConfig?.shirt || '#3b82f6';
-      const pants = avatarConfig?.pants || '#16a34a';
-
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skin}));
-      head.position.y = 1.6; group.add(head);
-
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), new THREE.MeshLambertMaterial({color: shirt}));
-      torso.position.y = 0.7; group.add(torso);
-
-      const armGeo = new THREE.BoxGeometry(0.35, 1.1, 0.4);
-      const lArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); lArm.position.set(-0.7, 0.7, 0);
-      const rArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); rArm.position.set(0.7, 0.7, 0);
-      group.add(lArm); group.add(rArm);
-
-      const legGeo = new THREE.BoxGeometry(0.42, 1.1, 0.5);
-      const lLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); lLeg.position.set(-0.25, -0.45, 0);
-      const rLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); rLeg.position.set(0.25, -0.45, 0);
-      group.add(lLeg); group.add(rLeg);
-
-      return group;
-    }
-
     function joinGame(gameId) {
       document.getElementById('game-canvas-container').style.display = 'block';
       let recent = JSON.parse(localStorage.getItem('dyno_recent') || '[]');
@@ -901,7 +919,6 @@
         if (keys['a'] || keys['arrowleft']) moveX -= 0.15;
         if (keys['d'] || keys['arrowright']) moveX += 0.15;
 
-        // Move relative to camera angle
         player.position.x += moveX * Math.cos(mouseAngleY) - moveZ * Math.sin(mouseAngleY);
         player.position.z += moveX * Math.sin(mouseAngleY) + moveZ * Math.cos(mouseAngleY);
         player.rotation.y = mouseAngleY;
