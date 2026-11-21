@@ -293,7 +293,6 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
   <script src="engine.js"></script>
   <script>
-    // Game loading and publishing logic
     async function loadGames() {
       try {
         const res = await fetch('/api/games');
@@ -336,14 +335,17 @@
       loadGames();
     });
 
-    function openPublishModal() {
+    window.openPublishModal = function() {
       const titleInput = document.getElementById('pub-title');
       const studioTitle = document.getElementById('gameTitle');
       if (titleInput && studioTitle) {
         titleInput.value = studioTitle.value || 'My Dyno World';
       }
-      document.getElementById('publish-modal').style.display = 'flex';
-    }
+      const modal = document.getElementById('publish-modal');
+      if (modal) {
+        modal.style.display = 'flex';
+      }
+    };
 
     async function publishGame() {
       const title = document.getElementById('pub-title').value.trim() || 'My Dyno World';
