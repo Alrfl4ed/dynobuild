@@ -293,16 +293,57 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
   <script src="engine.js"></script>
   <script>
-    // Additional UI helpers for Dybux quests and Studio script editor view
+    // Tab switching logic including Dybux & Quests tab
+    function switchTab(tabName) {
+      document.getElementById('home-view').style.display = 'none';
+      document.getElementById('discover-view').style.display = 'none';
+      document.getElementById('avatar-view').style.display = 'none';
+      document.getElementById('dybux-view').style.display = 'none';
+      document.getElementById('profile-view').style.display = 'none';
+      
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+
+      if (tabName === 'home') {
+        document.getElementById('home-view').style.display = 'block';
+        document.getElementById('nav-home').classList.add('active');
+      } else if (tabName === 'discover') {
+        document.getElementById('discover-view').style.display = 'block';
+        document.getElementById('nav-discover').classList.add('active');
+      } else if (tabName === 'avatar') {
+        document.getElementById('avatar-view').style.display = 'flex';
+        document.getElementById('nav-avatar').classList.add('active');
+      } else if (tabName === 'dybux') {
+        document.getElementById('dybux-view').style.display = 'block';
+        document.getElementById('nav-dybux-tab').classList.add('active');
+        updateDybuxDisplay();
+      } else if (tabName === 'profile') {
+        document.getElementById('profile-view').style.display = 'block';
+        document.getElementById('nav-profile').classList.add('active');
+      }
+    }
+
+    function updateDybuxDisplay() {
+      let currentUser = JSON.parse(localStorage.getItem('dyno_user') || '{"dybux": 100}');
+      document.getElementById('nav-dybux').innerText = `💎 ${currentUser.dybux ?? 100} Dybux`;
+      const balanceHeader = document.getElementById('dybux-balance-header');
+      if (balanceHeader) {
+        balanceHeader.innerText = `💎 ${currentUser.dybux ?? 100} Dybux`;
+      }
+    }
+
+    function completeQuest(questId, reward) {
+      let currentUser = JSON.parse(localStorage.getItem('dyno_user') || '{"dybux": 100}');
+      currentUser.dybux = (currentUser.dybux || 100) + reward;
+      localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+      updateDybuxDisplay();
+      alert(`Quest completed! Added 💎 ${reward} Dybux to your account.`);
+    }
+
     function setStudioView(mode) {
       const editor = document.getElementById('studio-script-editor');
       if (editor) {
         editor.style.display = (mode === 'code') ? 'block' : 'none';
       }
-    }
-
-    function completeQuest(questId, reward) {
-      alert(`Quest completed! You earned 💎 ${reward} Dybux.`);
     }
   </script>
 </body>
