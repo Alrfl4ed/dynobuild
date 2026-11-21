@@ -54,11 +54,18 @@
     .game-creator { font-size: 0.8rem; color: var(--text-muted); }
     .game-stats { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 4px; }
 
+    /* AVATAR CATALOG STYLES */
+    .avatar-builder-grid { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+    .avatar-preview-box { background: #090d16; border: 1px solid var(--border-dark); border-radius: 8px; height: 320px; display: flex; align-items: center; justify-content: center; position: relative; }
+    .customizer-options { display: flex; flex-direction: column; gap: 12px; background: var(--card-dark); padding: 16px; border-radius: 8px; border: 1px solid var(--border-dark); }
+    .color-picker-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem; }
+    .color-picker-row input { height: 35px; width: 60px; cursor: pointer; background: transparent; border: none; }
+
     /* ROBLOX STUDIO IDE LAYOUT */
     #tab-studio { display: none; height: 100%; flex-direction: column; }
     .studio-ribbon { background: #1e293b; border-bottom: 1px solid var(--border-dark); padding: 8px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .studio-ribbon .divider { width: 1px; height: 24px; background: var(--border-dark); margin: 0 4px; }
-    .studio-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 6px 10px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px; }
+    .studio-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 6px 10px; border-radius: 4px; font-size: 0.8rem; display: flex; align-items: center; gap: 5px; cursor: pointer; }
     .studio-btn:hover { background: #475569; }
     .studio-btn.play { background: #16a34a; border-color: #22c55e; color: white; }
     .studio-btn.stop { background: #ef4444; border-color: #f87171; color: white; }
@@ -86,7 +93,8 @@
     .modal input { width: 100%; padding: 10px; background: #0f172a; border: 1px solid var(--border-dark); border-radius: 6px; color: white; }
 
     /* Fullscreen Play Viewport */
-    #game-canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 500; background: #000; }
+    #game-canvas-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 500; background: #000; cursor: grab; }
+    #game-canvas-container:active { cursor: grabbing; }
     .game-hud { position: absolute; top: 15px; left: 15px; z-index: 510; display: flex; gap: 10px; }
     .chat-box { position: absolute; bottom: 15px; left: 15px; width: 320px; height: 180px; background: rgba(15, 23, 42, 0.85); border: 1px solid var(--border-dark); border-radius: 8px; z-index: 510; display: flex; flex-direction: column; padding: 10px; }
     .chat-messages { flex: 1; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
@@ -101,6 +109,7 @@
       .sidebar { display: none; }
       .mobile-controls { display: block; }
       .studio-workspace { grid-template-columns: 1fr; }
+      .avatar-builder-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -119,6 +128,7 @@
   <div class="app-container">
     <div class="sidebar">
       <a class="active" onclick="switchTab('home', this)">🏠 Home</a>
+      <a onclick="switchTab('catalog', this)">👕 Avatar Catalog</a>
       <a onclick="switchTab('studio', this)">🛠️ DynoStudio</a>
       <a onclick="switchTab('profile', this)">👤 My Profile</a>
       <a onclick="openModal('search-user-modal')">🔍 Search Profile</a>
@@ -145,6 +155,21 @@
         <div class="games-grid" id="all-games-grid"></div>
       </div>
 
+      <!-- AVATAR CATALOG TAB -->
+      <div id="tab-catalog" class="page-pad" style="display:none;">
+        <h2>Avatar Customizer</h2>
+        <p style="color:var(--text-muted); font-size:0.9rem;">Customize your block-man character colors and style!</p>
+        <div class="avatar-builder-grid">
+          <div class="avatar-preview-box" id="avatar-preview-container"></div>
+          <div class="customizer-options">
+            <div class="color-picker-row"><label>Skin Tone</label><input type="color" id="avatar-skin" value="#fde047" onchange="updateAvatarPreview()"></div>
+            <div class="color-picker-row"><label>Shirt Color</label><input type="color" id="avatar-shirt" value="#3b82f6" onchange="updateAvatarPreview()"></div>
+            <div class="color-picker-row"><label>Pants Color</label><input type="color" id="avatar-pants" value="#16a34a" onchange="updateAvatarPreview()"></div>
+            <button onclick="saveAvatar()" style="margin-top: 10px; background:#16a34a; color:white;">Save Avatar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ROBLOX STUDIO STYLE DYNOSTUDIO -->
       <div id="tab-studio">
         <div class="studio-ribbon">
@@ -161,7 +186,6 @@
         </div>
 
         <div class="studio-workspace">
-          <!-- Center 3D Viewport or Code Editor -->
           <div class="studio-center" id="studio-center-container">
             <canvas id="studio-3d-canvas"></canvas>
             <textarea id="studio-script-editor" placeholder="// Write custom JavaScript game logic here..."></textarea>
@@ -170,7 +194,6 @@
             </div>
           </div>
 
-          <!-- Right Explorer & Properties Dock -->
           <div class="studio-right-dock">
             <div class="dock-header">Explorer — Workspace</div>
             <div class="explorer-tree" id="studio-explorer-tree"></div>
@@ -333,6 +356,7 @@
 
     function switchTab(tab, el) {
       document.getElementById('tab-home').style.display = tab === 'home' ? 'flex' : 'none';
+      document.getElementById('tab-catalog').style.display = tab === 'catalog' ? 'flex' : 'none';
       document.getElementById('tab-studio').style.display = tab === 'studio' ? 'flex' : 'none';
       document.getElementById('tab-profile').style.display = tab === 'profile' ? 'flex' : 'none';
 
@@ -340,6 +364,7 @@
         document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
         el.classList.add('active');
       }
+      if (tab === 'catalog') initAvatarPreview();
       if (tab === 'profile') renderProfile(currentUser);
       if (tab === 'studio') initStudioEngine();
     }
@@ -410,6 +435,99 @@
       openModal('game-info-modal');
     }
 
+    // --- AVATAR BUILDER CATALOG ---
+    let avatarScene, avatarCamera, avatarRenderer, avatarGroup;
+    function initAvatarPreview() {
+      const container = document.getElementById('avatar-preview-container');
+      if (avatarRenderer) { container.appendChild(avatarRenderer.domElement); return; }
+
+      avatarScene = new THREE.Scene();
+      avatarScene.background = new THREE.Color(0x090d16);
+      avatarCamera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+      avatarCamera.position.set(0, 1.5, 5);
+
+      avatarRenderer = new THREE.WebGLRenderer({ antialias: true });
+      avatarRenderer.setSize(container.clientWidth, container.clientHeight);
+      container.appendChild(avatarRenderer.domElement);
+
+      avatarScene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(5, 5, 5));
+      avatarScene.add(new THREE.AmbientLight(0x606060));
+
+      if (currentUser && currentUser.avatar) {
+        document.getElementById('avatar-skin').value = currentUser.avatar.skin || '#fde047';
+        document.getElementById('avatar-shirt').value = currentUser.avatar.shirt || '#3b82f6';
+        document.getElementById('avatar-pants').value = currentUser.avatar.pants || '#16a34a';
+      }
+      buildAvatarMesh();
+
+      function anim() {
+        requestAnimationFrame(anim);
+        if (avatarGroup) avatarGroup.rotation.y += 0.01;
+        avatarRenderer.render(avatarScene, avatarCamera);
+      }
+      anim();
+    }
+
+    function buildAvatarMesh() {
+      if (avatarGroup) avatarScene.remove(avatarGroup);
+      avatarGroup = new THREE.Group();
+
+      const skinColor = document.getElementById('avatar-skin').value;
+      const shirtColor = document.getElementById('avatar-shirt').value;
+      const pantsColor = document.getElementById('avatar-pants').value;
+
+      // Head
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skinColor}));
+      head.position.y = 1.6;
+      avatarGroup.add(head);
+
+      // Torso
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), new THREE.MeshLambertMaterial({color: shirtColor}));
+      torso.position.y = 0.7;
+      avatarGroup.add(torso);
+
+      // Left Arm & Right Arm
+      const armGeo = new THREE.BoxGeometry(0.35, 1.1, 0.4);
+      const lArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skinColor}));
+      lArm.position.set(-0.7, 0.7, 0);
+      const rArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skinColor}));
+      rArm.position.set(0.7, 0.7, 0);
+      avatarGroup.add(lArm); avatarGroup.add(rArm);
+
+      // Left Leg & Right Leg
+      const legGeo = new THREE.BoxGeometry(0.42, 1.1, 0.5);
+      const lLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pantsColor}));
+      lLeg.position.set(-0.25, -0.45, 0);
+      const rLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pantsColor}));
+      rLeg.position.set(0.25, -0.45, 0);
+      avatarGroup.add(lLeg); avatarGroup.add(rLeg);
+
+      avatarGroup.position.y = -0.3;
+      avatarScene.add(avatarGroup);
+    }
+
+    function updateAvatarPreview() { buildAvatarMesh(); }
+
+    async function saveAvatar() {
+      if (!currentUser) return alert('Please login first!');
+      const avatar = {
+        skin: document.getElementById('avatar-skin').value,
+        shirt: document.getElementById('avatar-shirt').value,
+        pants: document.getElementById('avatar-pants').value
+      };
+      const res = await fetch('/api/avatar', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ username: currentUser.username, avatar })
+      });
+      const data = await res.json();
+      if (data.success) {
+        currentUser.avatar = avatar;
+        localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+        alert('Avatar saved successfully!');
+      }
+    }
+
     // --- AUTH & BADGES ---
     async function loginUser() {
       const username = document.getElementById('login-user').value;
@@ -458,7 +576,6 @@
 
     function formatBadge(b) {
       if (b === 'admin') return '<span style="background:#ef4444; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">🛡️ Admin</span>';
-      if (b === 'mod') return '<span style="background:#3b82f6; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">⚔️ Moderator</span>';
       if (b === 'og') return '<span style="background:#f59e0b; color:#0f172a; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">⭐ OG Player</span>';
       if (b === 'developer') return '<span style="background:#8b5cf6; color:white; padding:5px 10px; border-radius:6px; font-weight:bold; font-size:0.85rem;">🚀 Developer (1K+ Visits)</span>';
       return `<span style="background:#334155; color:white; padding:5px 10px; border-radius:6px; font-size:0.85rem;">${b}</span>`;
@@ -499,7 +616,7 @@
     let studioScene, studioCamera, studioRenderer, studioInitialized = false;
     let studioMeshes = [];
     let isStudioPlaytesting = false;
-    let studioPlayerMesh = null;
+    let studioPlayerGroup = null;
 
     function initStudioEngine() {
       renderStudioExplorer();
@@ -521,22 +638,20 @@
       studioRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       studioRenderer.setSize(container.clientWidth, container.clientHeight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-      dirLight.position.set(15, 25, 15);
-      studioScene.add(dirLight);
+      studioScene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(15, 25, 15));
       studioScene.add(new THREE.AmbientLight(0x606060));
 
       rebuildStudio3D();
 
       function studioLoop() {
         requestAnimationFrame(studioLoop);
-        if (isStudioPlaytesting && studioPlayerMesh) {
-          if (keys['w'] || keys['arrowup']) studioPlayerMesh.position.z -= 0.15;
-          if (keys['s'] || keys['arrowdown']) studioPlayerMesh.position.z += 0.15;
-          if (keys['a'] || keys['arrowleft']) studioPlayerMesh.position.x -= 0.15;
-          if (keys['d'] || keys['arrowright']) studioPlayerMesh.position.x += 0.15;
-          studioCamera.position.set(studioPlayerMesh.position.x, studioPlayerMesh.position.y + 8, studioPlayerMesh.position.z + 12);
-          studioCamera.lookAt(studioPlayerMesh.position);
+        if (isStudioPlaytesting && studioPlayerGroup) {
+          if (keys['w'] || keys['arrowup']) studioPlayerGroup.position.z -= 0.15;
+          if (keys['s'] || keys['arrowdown']) studioPlayerGroup.position.z += 0.15;
+          if (keys['a'] || keys['arrowleft']) studioPlayerGroup.position.x -= 0.15;
+          if (keys['d'] || keys['arrowright']) studioPlayerGroup.position.x += 0.15;
+          studioCamera.position.set(studioPlayerGroup.position.x, studioPlayerGroup.position.y + 6, studioPlayerGroup.position.z + 10);
+          studioCamera.lookAt(studioPlayerGroup.position);
         }
         studioRenderer.render(studioScene, studioCamera);
       }
@@ -548,7 +663,7 @@
       studioMeshes.forEach(m => studioScene.remove(m));
       studioMeshes = [];
 
-      studioBlocks.forEach((b, idx) => {
+      studioBlocks.forEach((b) => {
         const geo = new THREE.BoxGeometry(b.w, b.h, b.d);
         const mat = new THREE.MeshLambertMaterial({ color: b.color });
         const mesh = new THREE.Mesh(geo, mat);
@@ -620,14 +735,6 @@
         <div class="prop-row"><label>Size W</label><input type="number" value="${b.w}" onchange="updateProp('w', parseFloat(this.value))"></div>
         <div class="prop-row"><label>Size H</label><input type="number" value="${b.h}" onchange="updateProp('h', parseFloat(this.value))"></div>
         <div class="prop-row"><label>Size D</label><input type="number" value="${b.d}" onchange="updateProp('d', parseFloat(this.value))"></div>
-        <div class="prop-row"><label>Behavior</label>
-          <select onchange="updateProp('script', this.value)">
-            <option value="solid" ${b.script==='solid'?'selected':''}>Solid</option>
-            <option value="jumppad" ${b.script==='jumppad'?'selected':''}>JumpPad</option>
-            <option value="kill" ${b.script==='kill'?'selected':''}>KillBrick</option>
-            <option value="checkpoint" ${b.script==='checkpoint'?'selected':''}>Checkpoint</option>
-          </select>
-        </div>
       `;
     }
 
@@ -648,16 +755,17 @@
         btn.innerText = '⏹ Stop';
         btn.className = 'studio-btn stop';
         hint.style.display = 'block';
-        studioPlayerMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshLambertMaterial({ color: 0xfacc15 }));
-        studioPlayerMesh.position.set(0, 1.5, 0);
-        studioScene.add(studioPlayerMesh);
+
+        studioPlayerGroup = createBlockManCharacter(currentUser?.avatar);
+        studioPlayerGroup.position.set(0, 1.5, 0);
+        studioScene.add(studioPlayerGroup);
       } else {
         btn.innerText = '▶ Playtest';
         btn.className = 'studio-btn play';
         hint.style.display = 'none';
-        if (studioPlayerMesh) {
-          studioScene.remove(studioPlayerMesh);
-          studioPlayerMesh = null;
+        if (studioPlayerGroup) {
+          studioScene.remove(studioPlayerGroup);
+          studioPlayerGroup = null;
         }
         studioCamera.position.set(12, 14, 18);
         studioCamera.lookAt(0, 0, 0);
@@ -684,7 +792,32 @@
       }
     }
 
-    // --- MULTIPLAYER PLAY VIEWPORT ---
+    // --- MULTIPLAYER PLAY VIEWPORT WITH MOUSE LOOK & BLOCK-MAN ---
+    function createBlockManCharacter(avatarConfig) {
+      const group = new THREE.Group();
+      const skin = avatarConfig?.skin || '#fde047';
+      const shirt = avatarConfig?.shirt || '#3b82f6';
+      const pants = avatarConfig?.pants || '#16a34a';
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skin}));
+      head.position.y = 1.6; group.add(head);
+
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.6), new THREE.MeshLambertMaterial({color: shirt}));
+      torso.position.y = 0.7; group.add(torso);
+
+      const armGeo = new THREE.BoxGeometry(0.35, 1.1, 0.4);
+      const lArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); lArm.position.set(-0.7, 0.7, 0);
+      const rArm = new THREE.Mesh(armGeo, new THREE.MeshLambertMaterial({color: skin})); rArm.position.set(0.7, 0.7, 0);
+      group.add(lArm); group.add(rArm);
+
+      const legGeo = new THREE.BoxGeometry(0.42, 1.1, 0.5);
+      const lLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); lLeg.position.set(-0.25, -0.45, 0);
+      const rLeg = new THREE.Mesh(legGeo, new THREE.MeshLambertMaterial({color: pants})); rLeg.position.set(0.25, -0.45, 0);
+      group.add(lLeg); group.add(rLeg);
+
+      return group;
+    }
+
     function joinGame(gameId) {
       document.getElementById('game-canvas-container').style.display = 'block';
       let recent = JSON.parse(localStorage.getItem('dyno_recent') || '[]');
@@ -692,8 +825,8 @@
       localStorage.setItem('dyno_recent', JSON.stringify(recent));
 
       socket = io();
-      socket.emit('presence', { username: currentUser ? currentUser.username : null });
-      socket.emit('joinGame', { gameId, username: currentUser ? currentUser.username : null });
+      socket.emit('presence', { username: currentUser ? currentUser.username : null, avatar: currentUser?.avatar });
+      socket.emit('joinGame', { gameId, username: currentUser ? currentUser.username : null, avatar: currentUser?.avatar });
 
       socket.on('initWorld', ({ game }) => {
         document.getElementById('game-hud-title').innerText = game.title;
@@ -729,12 +862,10 @@
       scene.background = new THREE.Color(0x0f172a);
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(container.innerWidth || window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
-      const light = new THREE.DirectionalLight(0xffffff, 1);
-      light.position.set(10, 20, 10);
-      scene.add(light);
+      scene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(10, 20, 10));
       scene.add(new THREE.AmbientLight(0x505050));
 
       (gameData.blocks || []).forEach(b => {
@@ -745,18 +876,42 @@
         scene.add(mesh);
       });
 
-      const player = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 1), new THREE.MeshLambertMaterial({ color: 0x38bdf8 }));
-      player.position.set(0, 1.5, 0);
+      const player = createBlockManCharacter(currentUser?.avatar);
+      player.position.set(0, 0.5, 0);
       scene.add(player);
+
+      // Mouse look controls
+      let isMouseDown = false;
+      let mouseAngleY = 0;
+      let mouseAngleX = 0.3;
+
+      container.onmousedown = () => isMouseDown = true;
+      window.onmouseup = () => isMouseDown = false;
+      window.onmousemove = (e) => {
+        if (!isMouseDown) return;
+        mouseAngleY -= e.movementX * 0.005;
+        mouseAngleX = Math.max(0.1, Math.min(1.2, mouseAngleX - e.movementY * 0.005));
+      };
 
       function animate() {
         requestAnimationFrame(animate);
-        if (keys['w'] || keys['arrowup']) player.position.z -= 0.15;
-        if (keys['s'] || keys['arrowdown']) player.position.z += 0.15;
-        if (keys['a'] || keys['arrowleft']) player.position.x -= 0.15;
-        if (keys['d'] || keys['arrowright']) player.position.x += 0.15;
-        camera.position.set(player.position.x, player.position.y + 6, player.position.z + 10);
-        camera.lookAt(player.position);
+        let moveX = 0, moveZ = 0;
+        if (keys['w'] || keys['arrowup']) moveZ -= 0.15;
+        if (keys['s'] || keys['arrowdown']) moveZ += 0.15;
+        if (keys['a'] || keys['arrowleft']) moveX -= 0.15;
+        if (keys['d'] || keys['arrowright']) moveX += 0.15;
+
+        // Move relative to camera angle
+        player.position.x += moveX * Math.cos(mouseAngleY) - moveZ * Math.sin(mouseAngleY);
+        player.position.z += moveX * Math.sin(mouseAngleY) + moveZ * Math.cos(mouseAngleY);
+        player.rotation.y = mouseAngleY;
+
+        const camDist = 8;
+        camera.position.x = player.position.x + camDist * Math.sin(mouseAngleY) * Math.cos(mouseAngleX);
+        camera.position.y = player.position.y + camDist * Math.sin(mouseAngleX);
+        camera.position.z = player.position.z + camDist * Math.cos(mouseAngleY) * Math.cos(mouseAngleX);
+        camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
         renderer.render(scene, camera);
       }
       animate();
