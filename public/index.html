@@ -1,224 +1,516 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>DynoBuild</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DynoBuild - 3D Multi-Player Platform</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body { background: #121417; color: #f1f5f9; overflow: hidden; }
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --border: #cbd5e1;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
-    #topbar { height: 48px; background: #191b1f; border-bottom: 1px solid #2b2e36; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 20; position: relative; }
-    .brand { font-weight: 900; font-size: 1.25rem; color: #ffffff; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .brand span { background: #00a2ff; color: #fff; padding: 2px 7px; border-radius: 5px; font-size: 0.9rem; }
-    .top-user { display: flex; align-items: center; gap: 12px; font-size: 0.9rem; }
-    
-    input, select, button { padding: 7px 12px; border-radius: 6px; border: 1px solid #393d47; background: #23252b; color: white; font-size: 0.9rem; }
-    button { background: #00a2ff; border: none; cursor: pointer; font-weight: 600; transition: 0.15s; }
-    button:hover { background: #0088d6; }
-    button.play-btn { background: #00b06f; width: 100%; font-size: 1rem; padding: 8px; }
-    button.play-btn:hover { background: #00945d; }
-    button.secondary { background: #2b2e36; border: 1px solid #454954; }
-    button.secondary:hover { background: #383c47; }
-    button.danger { background: #dc2626; }
-    button.active-tool { outline: 2px solid #00a2ff; background: #0284c7; }
+    /* Navbar */
+    nav { background: #1e293b; color: white; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; height: 60px; }
+    .logo { font-size: 1.5rem; font-weight: bold; color: #38bdf8; cursor: pointer; }
+    .nav-links { display: flex; gap: 15px; align-items: center; }
+    button, .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    button:hover { background: var(--primary-hover); }
+    .currency-badge { background: #0f172a; padding: 6px 12px; border-radius: 20px; color: #facc15; font-weight: bold; border: 1px solid #334155; }
 
-    #app-shell { display: flex; height: calc(100vh - 48px); }
-    #sidebar { width: 200px; background: #191b1f; border-right: 1px solid #2b2e36; padding: 14px 10px; display: flex; flex-direction: column; gap: 6px; }
-    .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: #cbd5e1; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
-    .nav-item:hover { background: #23252b; color: #fff; }
-    .nav-item.active { background: #2b2e36; color: #fff; border-left: 3px solid #00a2ff; }
+    /* Main Container */
+    .app-container { flex: 1; display: flex; overflow: hidden; position: relative; }
+    .sidebar { width: 240px; background: white; border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .sidebar a { padding: 10px 12px; border-radius: 6px; text-decoration: none; color: var(--text); font-weight: 500; cursor: pointer; }
+    .sidebar a:hover, .sidebar a.active { background: #eff6ff; color: var(--primary); }
 
-    #main-content { flex: 1; padding: 26px 32px; overflow-y: auto; }
-    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
-    .section-header h2 { font-size: 1.25rem; font-weight: 700; }
+    .content-area { flex: 1; padding: 25px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
 
-    .welcome-banner { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
-    .avatar-circle { width: 64px; height: 64px; border-radius: 50%; background: #2b2e36; border: 2px solid #00a2ff; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; }
+    /* Search & Filters */
+    .search-bar-container { display: flex; gap: 10px; margin-bottom: 10px; }
+    .search-bar-container input { flex: 1; padding: 10px 15px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; }
+    .categories-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; }
+    .cat-chip { background: white; border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; cursor: pointer; font-size: 0.9rem; font-weight: 500; white-space: nowrap; }
+    .cat-chip.active { background: var(--primary); color: white; border-color: var(--primary); }
 
-    .friends-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 28px; }
-    .friend-card { min-width: 110px; background: #191b1f; border: 1px solid #2b2e36; border-radius: 10px; padding: 12px 10px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
-    .friend-avatar-head { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #111; font-size: 1.2rem; position: relative; }
-    .status-dot { width: 13px; height: 13px; border-radius: 50%; position: absolute; bottom: 0; right: 0; border: 2px solid #191b1f; background: #64748b; }
-    .status-dot.online { background: #00a2ff; }
-    .status-dot.ingame { background: #00b06f; }
-    .friend-name { font-size: 0.85rem; font-weight: 600; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .friend-status-text { font-size: 0.72rem; color: #94a3b8; }
+    /* Game Cards Grid */
+    .section-title { font-size: 1.25rem; font-weight: bold; margin-top: 10px; }
+    .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+    .game-card { background: white; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; }
+    .game-card:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+    .game-thumb { height: 120px; width: 100%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.1rem; }
+    .game-info { padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+    .game-title { font-weight: bold; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .game-creator { font-size: 0.8rem; color: #64748b; }
+    .game-stats { font-size: 0.75rem; color: #64748b; display: flex; justify-content: space-between; margin-top: 4px; }
 
-    .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
-    .game-card { background: #191b1f; border: 1px solid #2b2e36; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: transform 0.15s; }
-    .game-card:hover { transform: translateY(-3px); border-color: #454954; }
-    .game-thumb { height: 120px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 900; color: rgba(255,255,255,0.85); }
-    .game-info { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-    .game-title { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .game-meta { font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; }
+    /* Modals & Overlays */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; display: none; }
+    .modal { background: white; padding: 25px; border-radius: 10px; width: 400px; max-width: 90%; display: flex; flex-direction: column; gap: 15px; }
+    .modal input, .modal textarea { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
 
-    #avatar-view { display: none; gap: 30px; align-items: flex-start; }
-    #avatar-preview-box { width: 320px; height: 380px; background: #191b1f; border: 1px solid #2b2e36; border-radius: 12px; overflow: hidden; position: relative; }
-    .avatar-controls { flex: 1; background: #191b1f; border: 1px solid #2b2e36; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 480px; }
-    .control-row { display: flex; justify-content: space-between; align-items: center; }
+    /* Game Viewport / Canvas */
+    #game-canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 50; background: #000; }
+    .game-hud { position: absolute; top: 15px; left: 15px; z-index: 60; display: flex; gap: 10px; }
+    .chat-box { position: absolute; bottom: 15px; left: 15px; width: 320px; height: 180px; background: rgba(0,0,0,0.6); border-radius: 8px; z-index: 60; display: flex; flex-direction: column; padding: 10px; color: white; }
+    .chat-messages { flex: 1; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+    .chat-input { display: flex; gap: 6px; }
+    .chat-input input { flex: 1; padding: 6px; border-radius: 4px; border: none; font-size: 0.85rem; }
 
-    #viewport-container { display: none; position: fixed; top: 48px; left: 0; width: 100vw; height: calc(100vh - 48px); z-index: 15; }
-    #studio-toolbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(25, 27, 31, 0.95); padding: 10px 14px; border-radius: 10px; display: none; gap: 8px; align-items: center; border: 1px solid #393d47; flex-wrap: wrap; z-index: 10; }
-    #leaderboard { position: absolute; top: 15px; right: 15px; width: 210px; background: rgba(25, 27, 31, 0.85); border: 1px solid #393d47; border-radius: 8px; padding: 10px; }
-    #leaderboard h4 { font-size: 0.78rem; text-transform: uppercase; color: #94a3b8; border-bottom: 1px solid #393d47; padding-bottom: 5px; margin-bottom: 6px; }
-    #player-list { list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 6px; }
-    .player-entry { display: flex; justify-content: space-between; align-items: center; }
-    #chat-box { position: absolute; bottom: 15px; left: 15px; width: 330px; background: rgba(25, 27, 31, 0.85); border: 1px solid #393d47; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-    #chat-messages { height: 135px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
-    #hud-controls { position: absolute; top: 15px; left: 15px; display: flex; gap: 10px; align-items: center; }
+    /* Mobile On-Screen Controls */
+    .mobile-controls { position: absolute; bottom: 20px; right: 20px; z-index: 60; display: none; gap: 10px; }
+    .dpad-cluster { display: grid; grid-template-columns: repeat(3, 50px); grid-template-rows: repeat(3, 50px); gap: 5px; }
+    .dpad-btn { background: rgba(255,255,255,0.3); border: 2px solid white; color: white; font-weight: bold; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; user-select: none; }
+    .dpad-btn:active { background: rgba(255,255,255,0.6); }
 
-    #auth-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 50; }
-    .auth-card { background: #191b1f; border: 1px solid #393d47; border-radius: 12px; padding: 28px; width: 360px; display: flex; flex-direction: column; gap: 14px; }
-    .auth-card h2 { text-align: center; font-size: 1.4rem; }
-    .auth-error { color: #f87171; font-size: 0.85rem; text-align: center; min-height: 18px; }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .mobile-controls { display: flex; }
+    }
   </style>
 </head>
 <body>
-  <div id="auth-modal">
-    <div class="auth-card">
-      <h2>🧱 DynoBuild</h2>
-      <p style="text-align:center; color:#94a3b8; font-size:0.88rem;">Log in or create an account to save your avatar, friends, and worlds.</p>
-      <input id="auth-user" placeholder="Username (min 3 chars)" />
-      <input id="auth-pass" type="password" placeholder="Password" />
-      <div class="auth-error" id="auth-error"></div>
-      <button onclick="submitAuth('login')">Log In</button>
-      <button class="secondary" onclick="submitAuth('register')">Sign Up (Create Account)</button>
-      <button class="secondary" style="font-size:0.8rem; opacity:0.75;" onclick="continueAsGuest()">Play as Guest</button>
-    </div>
-  </div>
 
-  <div id="topbar">
-    <div class="brand" onclick="switchTab('home')"><span>DB</span> DYNOBUILD</div>
-    <div class="top-user">
-      <span id="top-username" style="font-weight:700;">Guest</span>
-      <button class="secondary" style="padding:4px 10px; font-size:0.8rem;" onclick="logoutUser()">Log Out</button>
+  <!-- Navbar -->
+  <nav>
+    <div class="logo" onclick="switchTab('home')">DynoBuild</div>
+    <div class="nav-links">
+      <div class="currency-badge" id="nav-dybux">💎 100 Dybux</div>
+      <button onclick="claimDaily()" style="background:#16a34a; font-size: 0.85rem;">Daily Reward</button>
+      <div id="auth-nav-area">
+        <button onclick="openModal('login-modal')">Login</button>
+      </div>
     </div>
-  </div>
+  </nav>
 
-  <div id="app-shell">
-    <div id="sidebar">
-      <div class="nav-item active" id="nav-home" onclick="switchTab('home')">🏠 Home</div>
-      <div class="nav-item" id="nav-discover" onclick="switchTab('discover')">🧭 Discover</div>
-      <div class="nav-item" id="nav-avatar" onclick="switchTab('avatar')">👕 Avatar</div>
-      <div class="nav-item" id="nav-studio" onclick="openStudio()">🔨 DynoStudio</div>
+  <!-- App Body -->
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <a class="active" onclick="switchTab('home', this)">🏠 Home</a>
+      <a onclick="switchTab('games', this)">🎮 Discover Games</a>
+      <a onclick="switchTab('studio', this)">🛠️ DynoStudio</a>
+      <a onclick="switchTab('profile', this)">👤 My Profile</a>
+      <a onclick="openModal('search-user-modal')">🔍 Search Profile</a>
     </div>
 
-    <div id="main-content">
-      <div id="home-view">
-        <div class="welcome-banner">
-          <div class="avatar-circle" id="home-avatar-badge">🧱</div>
-          <div>
-            <h1 id="welcome-text" style="font-size:1.5rem;">Welcome back!</h1>
-            <p style="color:#94a3b8; font-size:0.9rem;">Jump into a world with friends or build your own.</p>
-          </div>
+    <!-- Content Area -->
+    <div class="content-area" id="main-content">
+      <!-- Home Tab Content -->
+      <div id="tab-home">
+        <div class="search-bar-container">
+          <input type="text" id="global-search" placeholder="Search games or players..." oninput="filterGames(this.value)">
         </div>
 
-        <div class="section-header">
-          <h2 id="friends-count-title">Friends (0)</h2>
-          <div style="display:flex; gap:8px;">
-            <input id="add-friend-input" placeholder="Add friend by username..." style="width:200px;" />
-            <button onclick="addFriend()">+ Add Friend</button>
-          </div>
-        </div>
-        <div class="friends-strip" id="friends-strip">
-          <p style="color:#64748b; font-size:0.9rem;">No friends added yet. Search a username above to connect!</p>
+        <div class="categories-row">
+          <div class="cat-chip active" onclick="setCategory('all', this)">All</div>
+          <div class="cat-chip" onclick="setCategory('trending', this)">🔥 Trending</div>
+          <div class="cat-chip" onclick="setCategory('popular', this)">⭐ Popular</div>
+          <div class="cat-chip" onclick="setCategory('most-players', this)">👥 Most Players</div>
+          <div class="cat-chip" onclick="setCategory('recommended', this)">✨ Recommended</div>
         </div>
 
-        <div class="section-header">
-          <h2>Recommended For You</h2>
-        </div>
-        <div class="game-grid" id="home-game-grid"></div>
+        <div class="section-title">Recently Played</div>
+        <div class="games-grid" id="recent-games-grid"></div>
+
+        <div class="section-title" id="games-section-title">All Games</div>
+        <div class="games-grid" id="all-games-grid"></div>
       </div>
 
-      <div id="discover-view" style="display:none;">
-        <div class="section-header">
-          <h2>All Experiences on DynoBuild</h2>
+      <!-- Studio Tab Content -->
+      <div id="tab-studio" style="display:none;">
+        <h2>DynoStudio Game Editor</h2>
+        <p>Create or update your 3D worlds, gamepasses, and custom code.</p>
+        <div style="display: flex; flex-direction: column; gap: 12px; max-width: 600px; margin-top: 15px;">
+          <input type="text" id="studio-game-title" placeholder="Game Title">
+          <textarea id="studio-custom-code" rows="6" placeholder="// Custom HTML / JavaScript game logic or block scripts"></textarea>
+          <button onclick="publishGame()" style="align-self: flex-start;">Publish / Update Game</button>
         </div>
-        <div class="game-grid" id="discover-game-grid"></div>
       </div>
 
-      <div id="avatar-view">
-        <div id="avatar-preview-box"></div>
-        <div class="avatar-controls">
-          <h2>Customize Character</h2>
-          <div class="control-row">
-            <label>Skin Tone</label>
-            <input type="color" id="av-skin" value="#fde047" onchange="previewAvatarChange()" />
-          </div>
-          <div class="control-row">
-            <label>Shirt Color</label>
-            <input type="color" id="av-shirt" value="#3b82f6" onchange="previewAvatarChange()" />
-          </div>
-          <div class="control-row">
-            <label>Pants Color</label>
-            <input type="color" id="av-pants" value="#16a34a" onchange="previewAvatarChange()" />
-          </div>
-          <div class="control-row">
-            <label>Hat Accessory</label>
-            <select id="av-hat" onchange="previewAvatarChange()">
-              <option value="none">None</option>
-              <option value="tophat">Classic Top Hat</option>
-              <option value="cap">Blue Baseball Cap</option>
-              <option value="crown">Golden Crown</option>
-              <option value="halo">Neon Halo</option>
-            </select>
-          </div>
-          <div class="control-row">
-            <label>Face Expression</label>
-            <select id="av-face" onchange="previewAvatarChange()">
-              <option value="smile">Classic Smile :)</option>
-              <option value="shades">Cool Shades B)</option>
-              <option value="happy">Big Grin :D</option>
-              <option value="surprised">Shocked :O</option>
-            </select>
-          </div>
-          <button class="play-btn" onclick="saveAvatarToAccount()">Save Avatar</button>
-          <span id="avatar-save-msg" style="color:#4ade80; font-size:0.85rem; text-align:center;"></span>
+      <!-- Profile Tab Content -->
+      <div id="tab-profile" style="display:none;">
+        <div id="profile-container" style="background:white; padding:20px; border-radius:8px; border:1px solid var(--border);">
+          <h2>Please login to view profile</h2>
         </div>
       </div>
     </div>
   </div>
 
-  <div id="viewport-container">
-    <div id="hud-controls">
-      <button class="danger" onclick="exitWorldToHome()">⬅ Leave Game</button>
-      <div style="background:rgba(25,27,31,0.8); padding:7px 12px; border-radius:6px; font-size:0.8rem;">
-        WASD: Move • Space: Jump • Right-Drag: Orbit
+  <!-- Game Play Viewport -->
+  <div id="game-canvas-container">
+    <div class="game-hud">
+      <button onclick="leaveGame()" style="background:#ef4444;">Leave Game</button>
+      <span id="game-hud-title" style="color:white; font-weight:bold; align-self:center;">Game Title</span>
+    </div>
+    <div class="chat-box">
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input">
+        <input type="text" id="chat-input-field" placeholder="Safe Chatting..." onkeydown="if(event.key==='Enter') sendChat()">
+        <button onclick="sendChat()">Send</button>
       </div>
     </div>
-
-    <div id="studio-toolbar">
-      <input id="gameTitle" placeholder="World Name..." value="My Dyno World" style="width:140px" />
-      <button onclick="studioAddBlock()">+ Part</button>
-      <button id="btn-translate" class="active-tool" onclick="setGizmoMode('translate')">Move</button>
-      <button id="btn-scale" onclick="setGizmoMode('scale')">Scale</button>
-      <button id="btn-rotate" onclick="setGizmoMode('rotate')">Rotate</button>
-      <input id="blockColor" type="color" value="#ef4444" onchange="updateSelectedBlock()" style="width:36px; padding:2px;" />
-      <select id="blockScript" onchange="updateSelectedBlock()">
-        <option value="solid">Solid Part</option>
-        <option value="jumppad">Jump Pad</option>
-        <option value="speed">Speed Pad</option>
-        <option value="checkpoint">Checkpoint</option>
-        <option value="kill">Lava / Kill</option>
-      </select>
-      <button class="danger" onclick="studioDeleteSelected()">Delete</button>
-      <button style="background:#00b06f;" onclick="publishGame()">Publish</button>
-    </div>
-
-    <div id="leaderboard">
-      <h4>Players in Server</h4>
-      <ul id="player-list"></ul>
-    </div>
-
-    <div id="chat-box">
-      <div id="chat-messages"></div>
-      <input id="chat-input" placeholder="Press Enter to chat..." />
+    <!-- Mobile D-Pad -->
+    <div class="mobile-controls">
+      <div class="dpad-cluster">
+        <div></div><div class="dpad-btn" ontouchstart="mobileMove('w', true)" ontouchend="mobileMove('w', false)">▲</div><div></div>
+        <div class="dpad-btn" ontouchstart="mobileMove('a', true)" ontouchend="mobileMove('a', false)">◀</div>
+        <div class="dpad-btn" ontouchstart="mobileMove('s', true)" ontouchend="mobileMove('s', false)">▼</div>
+        <div class="dpad-btn" ontouchstart="mobileMove('d', true)" ontouchend="mobileMove('d', false)">▶</div>
+      </div>
     </div>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
-  <script src="engine.js"></script>
+  <!-- Game Info Modal (Roblox Style) -->
+  <div class="modal-overlay" id="game-info-modal">
+    <div class="modal">
+      <h3 id="modal-game-title">Game Title</h3>
+      <p id="modal-game-creator">Creator: Builder</p>
+      <p id="modal-game-visits">Visits: 0</p>
+      <p id="modal-game-created">Created: Today</p>
+      <div style="display: flex; gap: 10px; margin-top: 10px;">
+        <button id="modal-play-btn" style="flex: 1;">Play</button>
+        <button onclick="closeModal('game-info-modal')" style="background:#64748b;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Modal -->
+  <div class="modal-overlay" id="login-modal">
+    <div class="modal">
+      <h3>Login to DynoBuild</h3>
+      <input type="text" id="login-user" placeholder="Username">
+      <input type="password" id="login-pass" placeholder="Password">
+      <button onclick="loginUser()">Login</button>
+      <p style="font-size:0.85rem; text-align:center;">Don't have an account? <a onclick="openModal('register-modal'); closeModal('login-modal');" style="color:var(--primary); cursor:pointer;">Register</a></p>
+    </div>
+  </div>
+
+  <!-- Register Modal -->
+  <div class="modal-overlay" id="register-modal">
+    <div class="modal">
+      <h3>Register Account</h3>
+      <input type="text" id="reg-user" placeholder="Username">
+      <input type="password" id="reg-pass" placeholder="Password (min 3 chars)">
+      <button onclick="registerUser()">Create Account</button>
+    </div>
+  </div>
+
+  <!-- Search Profile Modal -->
+  <div class="modal-overlay" id="search-user-modal">
+    <div class="modal">
+      <h3>Search User Profile</h3>
+      <input type="text" id="search-profile-input" placeholder="Enter username...">
+      <button onclick="searchProfile()">View Profile</button>
+      <button onclick="closeModal('search-user-modal')" style="background:#64748b;">Cancel</button>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = JSON.parse(localStorage.getItem('dyno_user') || 'null');
+    let allGames = [];
+    let currentCategory = 'all';
+    let socket = null;
+    let currentGameId = null;
+    let mobileKeys = { w: false, a: false, s: false, d: false };
+
+    // Initialize UI
+    function init() {
+      updateAuthUI();
+      fetchGames();
+    }
+
+    function updateAuthUI() {
+      const area = document.getElementById('auth-nav-area');
+      if (currentUser) {
+        area.innerHTML = `<span style="color:#38bdf8; font-weight:bold; margin-right:10px;">${currentUser.username}</span> <button onclick="logout()" style="background:#ef4444; font-size:0.85rem;">Logout</button>`;
+        document.getElementById('nav-dybux').innerText = `💎 ${currentUser.dybux || 100} Dybux`;
+      } else {
+        area.innerHTML = `<button onclick="openModal('login-modal')">Login</button>`;
+      }
+    }
+
+    function switchTab(tab, el) {
+      ['home', 'studio', 'profile'].forEach(t => {
+        document.getElementById(`tab-${t}`).style.display = t === tab ? 'block' : 'none';
+      });
+      if (el) {
+        document.querySelectorAll('.sidebar a').forEach(a => a.classList.remove('active'));
+        el.classList.add('active');
+      }
+      if (tab === 'profile') renderProfile(currentUser);
+    }
+
+    function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    async function fetchGames() {
+      const res = await fetch('/api/games');
+      allGames = await res.json();
+      renderGames(allGames);
+      renderRecentGames();
+    }
+
+    function renderGames(games) {
+      const grid = document.getElementById('all-games-grid');
+      grid.innerHTML = games.map(g => `
+        <div class="game-card" onclick='openGameInfo(${JSON.stringify(g)})'>
+          <div class="game-thumb" style="background: ${g.thumbColor}">${g.title}</div>
+          <div class="game-info">
+            <div class="game-title">${g.title}</div>
+            <div class="game-creator">By ${g.creator}</div>
+            <div class="game-stats">
+              <span>👀 ${g.visits || 0} visits</span>
+              <span>🟢 ${g.playerCount || 0}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderRecentGames() {
+      const recent = JSON.parse(localStorage.getItem('dyno_recent') || '[]');
+      const grid = document.getElementById('recent-games-grid');
+      const filtered = allGames.filter(g => recent.includes(g.id));
+      grid.innerHTML = filtered.length ? filtered.map(g => `
+        <div class="game-card" onclick='openGameInfo(${JSON.stringify(g)})'>
+          <div class="game-thumb" style="background: ${g.thumbColor}">${g.title}</div>
+          <div class="game-info">
+            <div class="game-title">${g.title}</div>
+            <div class="game-creator">By ${g.creator}</div>
+          </div>
+        </div>
+      `).join('') : '<p style="color:#64748b; font-size:0.9rem;">No recently played games yet.</p>';
+    }
+
+    function setCategory(cat, el) {
+      document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      currentCategory = cat;
+      let sorted = [...allGames];
+      if (cat === 'trending') sorted.sort((a,b) => b.visits - a.visits);
+      else if (cat === 'popular') sorted.sort((a,b) => b.visits - a.visits);
+      else if (cat === 'most-players') sorted.sort((a,b) => b.playerCount - a.playerCount);
+      renderGames(sorted);
+    }
+
+    function filterGames(query) {
+      const q = query.toLowerCase();
+      const filtered = allGames.filter(g => g.title.toLowerCase().includes(q) || g.creator.toLowerCase().includes(q));
+      renderGames(filtered);
+    }
+
+    let selectedGameForModal = null;
+    function openGameInfo(game) {
+      selectedGameForModal = game;
+      document.getElementById('modal-game-title').innerText = game.title;
+      document.getElementById('modal-game-creator').innerText = `Creator: ${game.creator}`;
+      document.getElementById('modal-game-visits').innerText = `Visits: ${game.visits || 0}`;
+      document.getElementById('modal-game-created').innerText = `Created: ${new Date(game.createdAt || Date.now()).toLocaleDateString()}`;
+      document.getElementById('modal-play-btn').onclick = () => { closeModal('game-info-modal'); joinGame(game.id); };
+      openModal('game-info-modal');
+    }
+
+    async function loginUser() {
+      const username = document.getElementById('login-user').value;
+      const password = document.getElementById('login-pass').value;
+      const res = await fetch('/api/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+      const data = await res.json();
+      if (data.success) {
+        currentUser = data.user;
+        localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+        updateAuthUI();
+        closeModal('login-modal');
+      } else { alert(data.error); }
+    }
+
+    async function registerUser() {
+      const username = document.getElementById('reg-user').value;
+      const password = document.getElementById('reg-pass').value;
+      const res = await fetch('/api/register', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username, password}) });
+      const data = await res.json();
+      if (data.success) {
+        currentUser = data.user;
+        localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+        updateAuthUI();
+        closeModal('register-modal');
+      } else { alert(data.error); }
+    }
+
+    function logout() {
+      currentUser = null;
+      localStorage.removeItem('dyno_user');
+      updateAuthUI();
+    }
+
+    async function claimDaily() {
+      if (!currentUser) return alert('Please login first!');
+      const res = await fetch('/api/daily-reward', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username: currentUser.username}) });
+      const data = await res.json();
+      if (data.success) {
+        currentUser.dybux = data.dybux;
+        localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+        updateAuthUI();
+        alert('Claimed 50 free Dybux!');
+      } else { alert(data.error); }
+    }
+
+    async function searchProfile() {
+      const username = document.getElementById('search-profile-input').value;
+      const res = await fetch(`/api/profile/${username}`);
+      if (res.ok) {
+        const profile = await res.json();
+        closeModal('search-user-modal');
+        switchTab('profile');
+        renderProfile(profile);
+      } else { alert('User not found.'); }
+    }
+
+    function renderProfile(user) {
+      const container = document.getElementById('profile-container');
+      if (!user) {
+        container.innerHTML = '<h2>Please login or search a profile</h2>';
+        return;
+      }
+      const badgesHTML = (user.badges || []).map(b => {
+        if (b === 'og') return '<span style="background:#f59e0b; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem;">⭐ OG</span>';
+        if (b === 'developer') return '<span style="background:#8b5cf6; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem;">🚀 Developer</span>';
+        return `<span style="background:#334155; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem;">${b}</span>`;
+      }).join(' ');
+
+      container.innerHTML = `
+        <h2>${user.username}'s Profile</h2>
+        <p>💎 Dybux: ${user.dybux || 100}</p>
+        <div style="margin-top:10px;"><strong>Badges:</strong> ${badgesHTML || 'None yet'}</div>
+        ${currentUser && (currentUser.username.toLowerCase() === '7lol7' || currentUser.username.toLowerCase() === 'dynobuild') && currentUser.username !== user.username ? `<button onclick="banUser('${user.username}')" style="background:#ef4444; margin-top:15px;">Ban User</button>` : ''}
+      `;
+    }
+
+    async function banUser(target) {
+      if (!confirm(`Are you sure you want to ban ${target}?`)) return;
+      await fetch('/api/admin/ban', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({adminUser: currentUser.username, targetUser: target}) });
+      alert('User banned successfully.');
+    }
+
+    async function publishGame() {
+      if (!currentUser) return alert('Login required to publish games.');
+      const title = document.getElementById('studio-game-title').value;
+      const customCode = document.getElementById('studio-custom-code').value;
+      const res = await fetch('/api/games', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ title, creator: currentUser.username, blocks: [], customCode })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Game published successfully!');
+        fetchGames();
+      }
+    }
+
+    // Three.js Multiplayer Game Session
+    function joinGame(gameId) {
+      currentGameId = gameId;
+      document.getElementById('game-canvas-container').style.display = 'block';
+      
+      // Save to recent
+      let recent = JSON.parse(localStorage.getItem('dyno_recent') || '[]');
+      recent = [gameId, ...recent.filter(id => id !== gameId)].slice(0, 5);
+      localStorage.setItem('dyno_recent', JSON.stringify(recent));
+
+      socket = io();
+      socket.emit('presence', { username: currentUser ? currentUser.username : 'Guest' });
+      socket.emit('joinGame', { gameId, username: currentUser ? currentUser.username : 'Guest' });
+
+      socket.on('initWorld', ({ game }) => {
+        document.getElementById('game-hud-title').innerText = game.title;
+        initThreeScene(game);
+      });
+
+      socket.on('chatMessage', ({ sender, msg }) => {
+        const box = document.getElementById('chat-messages');
+        box.innerHTML += `<div><strong>${sender}:</strong> ${msg}</div>`;
+        box.scrollTop = box.scrollHeight;
+      });
+    }
+
+    function leaveGame() {
+      if (socket) socket.disconnect();
+      document.getElementById('game-canvas-container').style.display = 'none';
+      fetchGames();
+    }
+
+    function sendChat() {
+      const input = document.getElementById('chat-input-field');
+      const msg = input.value.trim();
+      if (msg && socket) {
+        socket.emit('chat', msg);
+        input.value = '';
+      }
+    }
+
+    function initThreeScene(gameData) {
+      const container = document.getElementById('game-canvas-container');
+      // Clear old canvas if any
+      const existing = container.querySelector('canvas');
+      if (existing) existing.remove();
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x93c5fd);
+      const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      container.appendChild(renderer.domElement);
+
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(10, 20, 10);
+      scene.add(light);
+      scene.add(new THREE.AmbientLight(0x404040));
+
+      // Build blocks
+      (gameData.blocks || []).forEach(b => {
+        const geo = new THREE.BoxGeometry(b.w || 2, b.h || 2, b.d || 2);
+        const mat = new THREE.MeshLambertMaterial({ color: b.color || 0x2563eb });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(b.x || 0, b.y || 0, b.z || 0);
+        scene.add(mesh);
+      });
+
+      // Simple player character
+      const playerGeo = new THREE.BoxGeometry(1, 2, 1);
+      const playerMat = new THREE.MeshLambertMaterial({ color: 0x3b82f6 });
+      const player = new THREE.Mesh(playerGeo, playerMat);
+      player.position.set(0, 1, 0);
+      scene.add(player);
+
+      camera.position.set(0, 5, 10);
+      camera.lookAt(player.position);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        if (mobileKeys.w) player.position.z -= 0.1;
+        if (mobileKeys.s) player.position.z += 0.1;
+        if (mobileKeys.a) player.position.x -= 0.1;
+        if (mobileKeys.d) player.position.x += 0.1;
+        camera.position.x = player.position.x;
+        camera.position.z = player.position.z + 8;
+        camera.lookAt(player.position);
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    function mobileMove(key, state) { mobileKeys[key] = state; }
+
+    window.onload = init;
+  </script>
 </body>
 </html>
