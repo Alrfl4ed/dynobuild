@@ -294,38 +294,44 @@
   <script src="engine.js"></script>
   <script>
     // Load games on startup and tab switches
-    async function loadGames() {
-      try {
-        const res = await fetch('/api/games');
-        const games = await res.json();
-        const homeGrid = document.getElementById('home-game-grid');
-        const discoverGrid = document.getElementById('discover-game-grid');
-        
-        let html = '';
-        if (!games || games.length === 0) {
-          html = '<p style="color:#64748b; font-size:0.9rem;">No games published yet. Build and publish a game in DynoStudio!</p>';
-        } else {
-          games.forEach(g => {
-            html += `
-              <div class="game-card" onclick="if(typeof joinGame === 'function') joinGame(${g.id});">
-                <div class="game-thumb" style="background:${g.thumbColor || '#00a2ff'}">🧱 ${g.title}</div>
-                <div class="game-info">
-                  <div class="game-title">${g.title}</div>
-                  <div class="game-creator">By ${g.creator}</div>
-                  <div class="game-stats">
-                    <span>👁️ ${g.visits || 0} visits</span>
-                  </div>
-                </div>
-              </div>
-            `;
-          });
-        }
-        if (homeGrid) homeGrid.innerHTML = html;
-        if (discoverGrid) discoverGrid.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load games:', err);
+  async function loadGames() {
+    try {
+      const res = await fetch('/api/games');
+      let games = await res.json();
+      
+      // Fallback starter games if the database table is empty
+      if (!games || games.length === 0) {
+        games = [
+          { id: 1, title: "Lava Obby Rush", creator: "DynoBuild", thumbColor: "#ef4444", visits: 142 },
+          { id: 2, title: "Classic Sandbox", creator: "BuilderPro", thumbColor: "#00a2ff", visits: 89 }
+        ];
       }
+  
+      const homeGrid = document.getElementById('home-game-grid');
+      const discoverGrid = document.getElementById('discover-game-grid');
+      
+      let html = '';
+      games.forEach(g => {
+        html += `
+          <div class="game-card" onclick="if(typeof joinGame === 'function') { joinGame(${g.id}); } else { alert('Launching ${g.title}...'); }">
+            <div class="game-thumb" style="background:${g.thumbColor || '#00a2ff'}">🧱 ${g.title}</div>
+            <div class="game-info">
+              <div class="game-title">${g.title}</div>
+              <div class="game-creator">By ${g.creator || 'DynoBuild'}</div>
+              <div class="game-stats">
+                <span>👁️ ${g.visits || 0} visits</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+  
+      if (homeGrid) homeGrid.innerHTML = html;
+      if (discoverGrid) discoverGrid.innerHTML = html;
+    } catch (err) {
+      console.error('Failed to load games:', err);
     }
+  }
 
     // Call loadGames when page initializes
     window.addEventListener('DOMContentLoaded', () => {
