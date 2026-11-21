@@ -1,16 +1,360 @@
 const socket = io();
+
+// Current Logged-In User State
+let currentUser = {
+  username: "Guest_" + Math.floor(1000 + Math.random() * 9000),
+  isGuest: true,
+  avatar: { skin: "#fde047", shirt: "#3b82f6", pants: "#16a34a", hat: "none", face: "smile" }
+};
+
+// --- Authentication & Portal Tabs ---
+async function submitAuth(mode) {
+  const username = document.getElementById('auth-user').value.trim();
+  const password = document.getElementById('auth-pass').value;
+  const errBox = document.getElementById('auth-error');
+  errBox.textContent = "";
+
+  const res = await fetch(`/api/${mode}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    errBox.textContent = data.error || "Authentication failed.";
+    return;
+  }
+
+  currentUser = {
+    username: data.user.username,
+    isGuest: false,
+    avatar: data.user.avatar
+  };
+  localStorage.setItem('dynobuild_user', JSON.stringify(currentUser));
+  finishLogin();
+}
+
+function continueAsGuest() {
+  finishLogin();
+}
+
+function logoutUser() {
+  localStorage.removeItem('dynobuild_user');
+  location.reload();
+}
+
+function finishLogin() {
+  document.getElementById('auth-modal').style.display = 'none';
+  document.getElementById('top-username').textContent = currentUser.username;
+  document.getElementById('welcome-text').textContent = `Welcome back, ${currentUser.username}!`;
+  document.getElementById('home-avatar-badge').style.background = currentUser.avatar.shirt;
+  document.getElementById('home-avatar-badge').textContent = currentUser.username[0].toUpperCase();
+
+  // Sync Avatar Customizer inputs
+  document.getElementById('av-skin').value = currentUser.avatar.skin;
+  document.getElementById('av-shirt').value = currentUser.avatar.shirt;
+  document.getElementById('av-pants').value = currentUser.avatar.pants;
+  document.getElementById('av-hat').value = currentUser.avatar.hat;
+  document.getElementById('av-face').value = currentUser.avatar.face;
+
+  if (!currentUser.isGuest) {
+    socket.emit('presence', { username: currentUser.username, avatar: currentUser.avatar });
+  }
+  switchTab('home');
+}
+
+// Auto-restore session if saved
+const savedSession = localStorage.getItem('dynobuild_user');
+if (savedSession) {
+  try {
+    currentUser = JSON.parse(savedSession);
+    finishLogin();
+  } catch (e) {}
+}
+
+function switchTab(tab) {
+  ['home', 'discover', 'avatar'].forEach(t => {
+    document.getElementById('nav-' + t).classList.toggle('active', t === tab);
+  });
+  document.getElementById('home-view').style.display = tab === 'home' ? 'block' : 'none';
+  document.getElementById('discover-view').style.display = tab === 'discover' ? 'block' : 'none';
+  document.getElementById('avatar-view').style.display = tab === 'avatar' ? 'flex' : 'none';
+
+  if (tab === 'home') {
+    loadFriends();
+    loadGames();
+  } else if (tab === 'discover') {
+    loadGames();
+  } else if (tab === 'avatar') {
+    initAvatarPreview();
+  }
+}
+
+// --- Friends System ---
+async function loadFriends() {
+  const strip = document.getElementById('friends-strip');
+  if (currentUser.isGuest) {
+    strip.innerHTML = `<p style="color:#94a3b8; font-size:0.9rem;">Log in with an account to add friends and join their servers!</p>`;
+    return;
+  }
+  const res = await fetch(`/api/friends/${encodeURIComponent(currentUser.username)}`);
+  const friends = await res.json();
+  document.getElementById('friends-count-title').textContent = `Friends (${friends.length})`;
+
+  if (friends.length === 0) {
+    strip.innerHTML = `<p style="color:#64748b; font-size:0.9rem;">No friends added yet. Enter a username above to add one!</p>`;
+    return;
+  }
+
+  strip.innerHTML = friends.map(f => {
+    const dotClass = f.status === 'In-Game' ? 'ingame' : (f.online ? 'online' : '');
+    const joinBtn = f.status === 'In-Game' && f.gameId
+      ? `<button class="play-btn" style="padding:4px 8px; font-size:0.75rem;" onclick="joinGame('${f.gameId}')">Join</button>`
+      : '';
+    return `
+      <div class="friend-card">
+        <div class="friend-avatar-head" style="background:${f.avatar?.skin || '#fde047'}">
+          ${f.username[0].toUpperCase()}
+          <span class="status-dot ${dotClass}"></span>
+        </div>
+        <div class="friend-name">${f.username}</div>
+        <div class="friend-status-text">${f.status === 'In-Game' ? f.gameTitle : f.status}</div>
+        ${joinBtn}
+      </div>
+    `;
+  }).join('');
+}
+
+async function addFriend() {
+  if (currentUser.isGuest) return alert("Please create an account first to add friends!");
+  const input = document.getElementById('add-friend-input');
+  const friendUsername = input.value.trim();
+  if (!friendUsername) return;
+
+  const res = await fetch('/api/friends/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: currentUser.username, friendUsername })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+  input.value = "";
+  loadFriends();
+}
+
+// --- Games Catalog ---
+async function loadGames() {
+  const res = await fetch('/api/games');
+  const games = await res.json();
+  const cardsHTML = games.map(g => `
+    <div class="game-card">
+      <div class="game-thumb" style="background:${g.thumbColor}">🧱</div>
+      <div class="game-info">
+        <div class="game-title">${g.title}</div>
+        <div class="game-meta">
+          <span>By ${g.creator}</span>
+          <span>👤 ${g.playerCount}</span>
+        </div>
+        <button class="play-btn" onclick="joinGame('${g.id}')">▶ Play</button>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('home-game-grid').innerHTML = cardsHTML;
+  document.getElementById('discover-game-grid').innerHTML = cardsHTML;
+}
+
+// --- 3D Avatar Mesh Builder (Used in Customizer & In-Game) ---
+function createFaceTexture(faceType, skinColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = skinColor;
+  ctx.fillRect(0, 0, 128, 128);
+
+  ctx.fillStyle = '#111827';
+  if (faceType === 'shades') {
+    ctx.fillRect(20, 42, 38, 22);
+    ctx.fillRect(70, 42, 38, 22);
+    ctx.fillRect(58, 48, 12, 6);
+    ctx.beginPath();
+    ctx.arc(64, 78, 18, 0.1 * Math.PI, 0.9 * Math.PI);
+    ctx.lineWidth = 5;
+    ctx.stroke();
+  } else if (faceType === 'happy') {
+    ctx.beginPath();
+    ctx.arc(44, 48, 7, 0, Math.PI * 2);
+    ctx.arc(84, 48, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 72, 22, 0, Math.PI);
+    ctx.fill();
+  } else if (faceType === 'surprised') {
+    ctx.beginPath();
+    ctx.arc(44, 48, 7, 0, Math.PI * 2);
+    ctx.arc(84, 48, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 84, 12, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Classic smile
+    ctx.beginPath();
+    ctx.arc(44, 48, 7, 0, Math.PI * 2);
+    ctx.arc(84, 48, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(64, 74, 20, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.lineWidth = 6;
+    ctx.stroke();
+  }
+  return new THREE.CanvasTexture(canvas);
+}
+
+function buildRobloxAvatar(av, username = null) {
+  const cfg = av || currentUser.avatar;
+  const group = new THREE.Group();
+
+  // Legs (Pants)
+  const legMat = new THREE.MeshLambertMaterial({ color: cfg.pants });
+  const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.0, 0.6), legMat);
+  leftLeg.position.set(-0.3, 0.5, 0);
+  const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.0, 0.6), legMat);
+  rightLeg.position.set(0.3, 0.5, 0);
+
+  // Torso (Shirt)
+  const torso = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 1.2, 0.65),
+    new THREE.MeshLambertMaterial({ color: cfg.shirt })
+  );
+  torso.position.y = 1.6;
+
+  // Arms (Skin)
+  const skinMat = new THREE.MeshLambertMaterial({ color: cfg.skin });
+  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.15, 0.55), skinMat);
+  leftArm.position.set(-0.85, 1.6, 0);
+  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.15, 0.55), skinMat);
+  rightArm.position.set(0.85, 1.6, 0);
+
+  // Head with Face on Front (-Z is forward)
+  const faceTex = createFaceTexture(cfg.face, cfg.skin);
+  const headMats = [
+    skinMat, skinMat, skinMat, skinMat, skinMat,
+    new THREE.MeshLambertMaterial({ map: faceTex })
+  ];
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.85), headMats);
+  head.position.y = 2.65;
+
+  group.add(leftLeg, rightLeg, torso, leftArm, rightArm, head);
+
+  // Hats
+  if (cfg.hat === 'tophat') {
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.1, 16), new THREE.MeshLambertMaterial({ color: 0x111827 }));
+    brim.position.y = 3.1;
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.7, 16), new THREE.MeshLambertMaterial({ color: 0x111827 }));
+    top.position.y = 3.45;
+    group.add(brim, top);
+  } else if (cfg.hat === 'cap') {
+    const dome = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.35, 0.9), new THREE.MeshLambertMaterial({ color: 0x2563eb }));
+    dome.position.y = 3.15;
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.1, 0.5), new THREE.MeshLambertMaterial({ color: 0x1d4ed8 }));
+    visor.position.set(0, 3.05, -0.55);
+    group.add(dome, visor);
+  } else if (cfg.hat === 'crown') {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.42, 0.4, 8), new THREE.MeshLambertMaterial({ color: 0xfacc15 }));
+    crown.position.y = 3.25;
+    group.add(crown);
+  } else if (cfg.hat === 'halo') {
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 8, 24), new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+    halo.rotation.x = Math.PI / 2;
+    halo.position.y = 3.45;
+    group.add(halo);
+  }
+
+  if (username) {
+    const label = createOverheadSprite(username);
+    label.name = "overheadLabel";
+    group.add(label);
+  }
+
+  return group;
+}
+
+// --- Live 3D Avatar Customizer Preview ---
+let avScene, avCamera, avRenderer, avPreviewMesh;
+function initAvatarPreview() {
+  const box = document.getElementById('avatar-preview-box');
+  if (!avRenderer) {
+    avScene = new THREE.Scene();
+    avScene.background = new THREE.Color(0x1e293b);
+    avCamera = new THREE.PerspectiveCamera(50, box.clientWidth / box.clientHeight, 0.1, 100);
+    avCamera.position.set(0, 2.2, 5.5);
+    avCamera.lookAt(0, 1.8, 0);
+
+    avRenderer = new THREE.WebGLRenderer({ antialias: true });
+    avRenderer.setSize(box.clientWidth, box.clientHeight);
+    box.appendChild(avRenderer.domElement);
+
+    avScene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.1));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.7);
+    dir.position.set(5, 10, 7);
+    avScene.add(dir);
+
+    function renderAvLoop() {
+      requestAnimationFrame(renderAvLoop);
+      if (avPreviewMesh) avPreviewMesh.rotation.y += 0.015;
+      avRenderer.render(avScene, avCamera);
+    }
+    renderAvLoop();
+  }
+  previewAvatarChange();
+}
+
+function previewAvatarChange() {
+  const updated = {
+    skin: document.getElementById('av-skin').value,
+    shirt: document.getElementById('av-shirt').value,
+    pants: document.getElementById('av-pants').value,
+    hat: document.getElementById('av-hat').value,
+    face: document.getElementById('av-face').value
+  };
+  currentUser.avatar = updated;
+  if (avPreviewMesh) avScene.remove(avPreviewMesh);
+  avPreviewMesh = buildRobloxAvatar(updated, null);
+  avPreviewMesh.rotation.y = Math.PI; // Face camera initially
+  avScene.add(avPreviewMesh);
+}
+
+async function saveAvatarToAccount() {
+  const msg = document.getElementById('avatar-save-msg');
+  document.getElementById('home-avatar-badge').style.background = currentUser.avatar.shirt;
+  localStorage.setItem('dynobuild_user', JSON.stringify(currentUser));
+
+  if (!currentUser.isGuest) {
+    await fetch('/api/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: currentUser.username, avatar: currentUser.avatar })
+    });
+    socket.emit('presence', { username: currentUser.username, avatar: currentUser.avatar });
+  }
+  msg.textContent = "✔ Avatar saved!";
+  setTimeout(() => msg.textContent = "", 3000);
+}
+
+// ==========================================
+// 3D MULTIPLAYER & STUDIO ENGINE
+// ==========================================
 let scene, camera, renderer, transformControl, raycaster;
 let isStudio = false;
 let selfId = null;
 let myAvatar = null;
 let spawnPoint = { x: 0, y: 4, z: 0 };
-
-// Store active players: { id: { mesh, username, color, chatTimer } }
 let playersState = {};
-let worldBlocks = []; // { mesh, data }
+let worldBlocks = [];
 let selectedMesh = null;
 
-// Physics state
 const keys = {};
 let velocityY = 0;
 let isGrounded = false;
@@ -28,20 +372,16 @@ function initThree() {
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
 
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x475569, 0.95);
-  scene.add(hemi);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x475569, 0.95));
   const dir = new THREE.DirectionalLight(0xffffff, 0.8);
   dir.position.set(25, 50, 25);
   scene.add(dir);
 
-  // Studio TransformControls (Move, Scale, Rotate Gizmos)
   transformControl = new THREE.TransformControls(camera, renderer.domElement);
   transformControl.addEventListener('objectChange', syncMeshToData);
   scene.add(transformControl);
-
   raycaster = new THREE.Raycaster();
 
-  // Click to select parts in Studio
   renderer.domElement.addEventListener('pointerdown', (e) => {
     if (!isStudio || e.button !== 0 || transformControl.dragging) return;
     const rect = renderer.domElement.getBoundingClientRect();
@@ -50,17 +390,11 @@ function initThree() {
       -((e.clientY - rect.top) / rect.height) * 2 + 1
     );
     raycaster.setFromCamera(mouse, camera);
-    const meshes = worldBlocks.map(b => b.mesh);
-    const hits = raycaster.intersectObjects(meshes);
-    if (hits.length > 0) {
-      selectStudioBlock(hits[0].object);
-    } else {
-      transformControl.detach();
-      selectedMesh = null;
-    }
+    const hits = raycaster.intersectObjects(worldBlocks.map(b => b.mesh));
+    if (hits.length > 0) selectStudioBlock(hits[0].object);
+    else { transformControl.detach(); selectedMesh = null; }
   });
 
-  // Right-click camera orbit
   let dragging = false;
   renderer.domElement.addEventListener('mousedown', (e) => { if (e.button === 2) dragging = true; });
   window.addEventListener('mouseup', () => dragging = false);
@@ -80,16 +414,14 @@ function initThree() {
   animate();
 }
 
-// --- 3D Overhead Nameplate & Chat Bubble Generator ---
 function createOverheadSprite(username, chatText = null) {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 192;
   const ctx = canvas.getContext('2d');
 
-  // Draw floating speech bubble if player recently chatted
   if (chatText) {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
     ctx.beginPath();
     ctx.roundRect(36, 12, 440, 74, 18);
     ctx.fill();
@@ -104,8 +436,7 @@ function createOverheadSprite(username, chatText = null) {
     ctx.fillText(displayMsg, 256, 58);
   }
 
-  // Draw player username pill
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
   ctx.beginPath();
   ctx.roundRect(126, 102, 260, 44, 12);
   ctx.fill();
@@ -115,32 +446,10 @@ function createOverheadSprite(username, chatText = null) {
   ctx.textAlign = 'center';
   ctx.fillText(username, 256, 132);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
   sprite.scale.set(4.2, 1.6, 1);
-  sprite.position.y = 3.6;
+  sprite.position.y = 4.1;
   return sprite;
-}
-
-function createAvatarMesh(colorHex, username) {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 1.5, 0.7),
-    new THREE.MeshLambertMaterial({ color: colorHex })
-  );
-  body.position.y = 1.25;
-
-  const head = new THREE.Mesh(
-    new THREE.BoxGeometry(0.8, 0.8, 0.8),
-    new THREE.MeshLambertMaterial({ color: 0xfde047 })
-  );
-  head.position.y = 2.45;
-
-  const label = createOverheadSprite(username);
-  label.name = "overheadLabel";
-
-  group.add(body, head, label);
-  return group;
 }
 
 function setPlayerChatBubble(playerId, message) {
@@ -164,18 +473,26 @@ function setPlayerChatBubble(playerId, message) {
   }, 6000);
 }
 
-// --- Leaderboard UI Updater ---
 function updateLeaderboardUI() {
   const list = document.getElementById('player-list');
-  list.innerHTML = Object.values(playersState).map(p => `
-    <li class="player-entry">
-      <span class="color-dot" style="background:${p.color}"></span>
-      <span>${p.username}</span>
-    </li>
-  `).join('');
+  list.innerHTML = Object.values(playersState).map(p => {
+    const canAdd = !currentUser.isGuest && p.username !== currentUser.username;
+    const addBtn = canAdd
+      ? `<button style="padding:2px 6px; font-size:0.7rem;" onclick="quickAddFriend('${p.username}')">+Add</button>`
+      : '';
+    return `<li class="player-entry"><span>${p.username}</span>${addBtn}</li>`;
+  }).join('');
 }
 
-// --- Map Builder ---
+async function quickAddFriend(targetName) {
+  await fetch('/api/friends/add', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: currentUser.username, friendUsername: targetName })
+  });
+  alert(`Added ${targetName} to your Friends list!`);
+}
+
 function clearWorld() {
   if (transformControl) transformControl.detach();
   selectedMesh = null;
@@ -201,30 +518,9 @@ function buildMap(blocks) {
   blocks.forEach(b => spawnBlockFromData(b));
 }
 
-// --- Navigation & Lobby ---
-async function showLobby() {
-  isStudio = false;
-  document.getElementById('lobby').style.display = 'block';
-  document.getElementById('viewport-container').style.display = 'none';
-
-  const res = await fetch('/api/games');
-  const games = await res.json();
-  const grid = document.getElementById('game-grid');
-  grid.innerHTML = games.map(g => `
-    <div class="game-card">
-      <div>
-        <h3>${g.title}</h3>
-        <div class="game-meta">By ${g.creator} • 🟢 ${g.playerCount} Online</div>
-      </div>
-      <button class="green" onclick="joinGame('${g.id}')">▶ Play World</button>
-    </div>
-  `).join('');
-}
-
 function joinGame(gameId) {
   isStudio = false;
   spawnPoint = { x: 0, y: 4, z: 0 };
-  document.getElementById('lobby').style.display = 'none';
   document.getElementById('viewport-container').style.display = 'block';
   document.getElementById('studio-toolbar').style.display = 'none';
   document.getElementById('chat-box').style.display = 'flex';
@@ -233,16 +529,21 @@ function joinGame(gameId) {
 
   socket.emit('joinGame', {
     gameId,
-    username: document.getElementById('username').value,
-    color: document.getElementById('avatarColor').value
+    username: currentUser.username,
+    avatar: currentUser.avatar
   });
 }
 
-// --- DynoStudio Mode (Gizmos & Scripting) ---
+function exitWorldToHome() {
+  socket.emit('leaveGame');
+  document.getElementById('viewport-container').style.display = 'none';
+  switchTab('home');
+}
+
+// --- Studio Mode ---
 function openStudio() {
   isStudio = true;
   spawnPoint = { x: 0, y: 4, z: 0 };
-  document.getElementById('lobby').style.display = 'none';
   document.getElementById('viewport-container').style.display = 'block';
   document.getElementById('studio-toolbar').style.display = 'flex';
   document.getElementById('chat-box').style.display = 'none';
@@ -251,10 +552,9 @@ function openStudio() {
 
   Object.values(playersState).forEach(p => scene.remove(p.mesh));
   playersState = {};
+  if (myAvatar) scene.remove(myAvatar);
 
-  const uname = document.getElementById('username').value || "Builder";
-  const ucolor = document.getElementById('avatarColor').value;
-  myAvatar = createAvatarMesh(ucolor, uname);
+  myAvatar = buildRobloxAvatar(currentUser.avatar, currentUser.username);
   myAvatar.position.set(0, 3, 0);
   scene.add(myAvatar);
 
@@ -327,41 +627,39 @@ function studioDeleteSelected() {
 
 async function publishGame() {
   const title = document.getElementById('gameTitle').value;
-  const creator = document.getElementById('username').value;
-  const blocksPayload = worldBlocks.map(b => b.data);
-
   const res = await fetch('/api/games', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, creator, blocks: blocksPayload })
+    body: JSON.stringify({ title, creator: currentUser.username, blocks: worldBlocks.map(b => b.data) })
   });
   const data = await res.json();
   if (data.success) joinGame(data.gameId);
 }
 
-// --- Socket Events ---
+// --- Multiplayer Socket Events ---
 socket.on('initWorld', ({ game, players, selfId: id }) => {
   selfId = id;
   Object.values(playersState).forEach(p => scene.remove(p.mesh));
   playersState = {};
+  if (myAvatar) scene.remove(myAvatar);
 
   buildMap(game.blocks);
 
   Object.values(players).forEach(p => {
-    const mesh = createAvatarMesh(p.color, p.username);
+    const mesh = buildRobloxAvatar(p.avatar, p.username);
     mesh.position.set(p.x, p.y, p.z);
     scene.add(mesh);
-    playersState[p.id] = { mesh, username: p.username, color: p.color, chatTimer: null };
+    playersState[p.id] = { mesh, username: p.username, chatTimer: null };
     if (p.id === selfId) myAvatar = mesh;
   });
   updateLeaderboardUI();
 });
 
 socket.on('playerJoined', (p) => {
-  const mesh = createAvatarMesh(p.color, p.username);
+  const mesh = buildRobloxAvatar(p.avatar, p.username);
   mesh.position.set(p.x, p.y, p.z);
   scene.add(mesh);
-  playersState[p.id] = { mesh, username: p.username, color: p.color, chatTimer: null };
+  playersState[p.id] = { mesh, username: p.username, chatTimer: null };
   updateLeaderboardUI();
 });
 
@@ -423,7 +721,6 @@ function animate() {
   isGrounded = false;
   speedMultiplier = 1;
 
-  // Collision & Block Scripts
   for (const b of worldBlocks) {
     const d = b.data;
     const withinX = Math.abs(myAvatar.position.x - d.x) < (d.w / 2 + 0.5);
@@ -481,4 +778,4 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-showLobby();
+loadGames();
