@@ -293,7 +293,45 @@
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
   <script src="engine.js"></script>
   <script>
-    // Tab switching logic including Dybux & Quests tab
+    // Load games on startup and tab switches
+    async function loadGames() {
+      try {
+        const res = await fetch('/api/games');
+        const games = await res.json();
+        const homeGrid = document.getElementById('home-game-grid');
+        const discoverGrid = document.getElementById('discover-game-grid');
+        
+        let html = '';
+        if (!games || games.length === 0) {
+          html = '<p style="color:#64748b; font-size:0.9rem;">No games published yet. Build and publish a game in DynoStudio!</p>';
+        } else {
+          games.forEach(g => {
+            html += `
+              <div class="game-card" onclick="if(typeof joinGame === 'function') joinGame(${g.id});">
+                <div class="game-thumb" style="background:${g.thumbColor || '#00a2ff'}">🧱 ${g.title}</div>
+                <div class="game-info">
+                  <div class="game-title">${g.title}</div>
+                  <div class="game-creator">By ${g.creator}</div>
+                  <div class="game-stats">
+                    <span>👁️ ${g.visits || 0} visits</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+        }
+        if (homeGrid) homeGrid.innerHTML = html;
+        if (discoverGrid) discoverGrid.innerHTML = html;
+      } catch (err) {
+        console.error('Failed to load games:', err);
+      }
+    }
+
+    // Call loadGames when page initializes
+    window.addEventListener('DOMContentLoaded', () => {
+      loadGames();
+    });
+
     function switchTab(tabName) {
       document.getElementById('home-view').style.display = 'none';
       document.getElementById('discover-view').style.display = 'none';
@@ -306,9 +344,11 @@
       if (tabName === 'home') {
         document.getElementById('home-view').style.display = 'block';
         document.getElementById('nav-home').classList.add('active');
+        loadGames();
       } else if (tabName === 'discover') {
         document.getElementById('discover-view').style.display = 'block';
         document.getElementById('nav-discover').classList.add('active');
+        loadGames();
       } else if (tabName === 'avatar') {
         document.getElementById('avatar-view').style.display = 'flex';
         document.getElementById('nav-avatar').classList.add('active');
@@ -331,12 +371,37 @@
       }
     }
 
-    function completeQuest(questId, reward) {
-      let currentUser = JSON.parse(localStorage.getItem('dyno_user') || '{"dybux": 100}');
-      currentUser.dybux = (currentUser.dybux || 100) + reward;
-      localStorage.setItem('dyno_user', JSON.stringify(currentUser));
-      updateDybuxDisplay();
-      alert(`Quest completed! Added 💎 ${reward} Dybux to your account.`);
+    async function completeQuest(questId, reward) {
+      let currentUser = JSON.parse(localStorage.getItem('dyno_user') || 'null');
+      if (!currentUser || !currentUser.username) {
+        alert('Please log in to claim quest rewards!');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/complete-quest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: currentUser.username,
+            questId: questId,
+            reward: reward
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          currentUser.dybux = data.dybux;
+          localStorage.setItem('dyno_user', JSON.stringify(currentUser));
+          updateDybuxDisplay();
+          alert(`Quest completed! Added 💎 ${reward} Dybux to your account.`);
+        } else {
+          alert(data.error || 'Failed to claim reward.');
+        }
+      } catch (err) {
+        console.error('Network error claiming quest:', err);
+        alert('Could not connect to the server.');
+      }
     }
 
     function setStudioView(mode) {
