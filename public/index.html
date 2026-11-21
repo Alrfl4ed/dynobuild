@@ -7,7 +7,6 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
     body { background: #121417; color: #f1f5f9; overflow: hidden; }
 
-    /* Top Header Bar (Roblox-style dark slate) */
     #topbar { height: 48px; background: #191b1f; border-bottom: 1px solid #2b2e36; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 20; position: relative; }
     .brand { font-weight: 900; font-size: 1.25rem; color: #ffffff; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .brand span { background: #00a2ff; color: #fff; padding: 2px 7px; border-radius: 5px; font-size: 0.9rem; }
@@ -23,25 +22,19 @@
     button.danger { background: #dc2626; }
     button.active-tool { outline: 2px solid #00a2ff; background: #0284c7; }
 
-    /* App Shell Layout */
     #app-shell { display: flex; height: calc(100vh - 48px); }
-    
-    /* Left Sidebar Navigation */
     #sidebar { width: 200px; background: #191b1f; border-right: 1px solid #2b2e36; padding: 14px 10px; display: flex; flex-direction: column; gap: 6px; }
     .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: #cbd5e1; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
     .nav-item:hover { background: #23252b; color: #fff; }
     .nav-item.active { background: #2b2e36; color: #fff; border-left: 3px solid #00a2ff; }
 
-    /* Main Content Area */
     #main-content { flex: 1; padding: 26px 32px; overflow-y: auto; }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
     .section-header h2 { font-size: 1.25rem; font-weight: 700; }
 
-    /* Home Welcome Banner */
     .welcome-banner { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
     .avatar-circle { width: 64px; height: 64px; border-radius: 50%; background: #2b2e36; border: 2px solid #00a2ff; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; }
 
-    /* Friends Horizontal Strip */
     .friends-strip { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 28px; }
     .friend-card { min-width: 110px; background: #191b1f; border: 1px solid #2b2e36; border-radius: 10px; padding: 12px 10px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
     .friend-avatar-head { width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #111; font-size: 1.2rem; position: relative; }
@@ -51,7 +44,6 @@
     .friend-name { font-size: 0.85rem; font-weight: 600; max-width: 95px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .friend-status-text { font-size: 0.72rem; color: #94a3b8; }
 
-    /* Game Grid & Cards */
     .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 18px; }
     .game-card { background: #191b1f; border: 1px solid #2b2e36; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; transition: transform 0.15s; }
     .game-card:hover { transform: translateY(-3px); border-color: #454954; }
@@ -60,13 +52,11 @@
     .game-title { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .game-meta { font-size: 0.8rem; color: #94a3b8; display: flex; justify-content: space-between; }
 
-    /* Avatar Customizer View */
     #avatar-view { display: none; gap: 30px; align-items: flex-start; }
     #avatar-preview-box { width: 320px; height: 380px; background: #191b1f; border: 1px solid #2b2e36; border-radius: 12px; overflow: hidden; position: relative; }
     .avatar-controls { flex: 1; background: #191b1f; border: 1px solid #2b2e36; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 480px; }
     .control-row { display: flex; justify-content: space-between; align-items: center; }
 
-    /* 3D Game Viewport */
     #viewport-container { display: none; position: fixed; top: 48px; left: 0; width: 100vw; height: calc(100vh - 48px); z-index: 15; }
     #studio-toolbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(25, 27, 31, 0.95); padding: 10px 14px; border-radius: 10px; display: none; gap: 8px; align-items: center; border: 1px solid #393d47; flex-wrap: wrap; z-index: 10; }
     #leaderboard { position: absolute; top: 15px; right: 15px; width: 210px; background: rgba(25, 27, 31, 0.85); border: 1px solid #393d47; border-radius: 8px; padding: 10px; }
@@ -77,7 +67,6 @@
     #chat-messages { height: 135px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
     #hud-controls { position: absolute; top: 15px; left: 15px; display: flex; gap: 10px; align-items: center; }
 
-    /* Login / Signup Modal */
     #auth-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.78); display: flex; align-items: center; justify-content: center; z-index: 50; }
     .auth-card { background: #191b1f; border: 1px solid #393d47; border-radius: 12px; padding: 28px; width: 360px; display: flex; flex-direction: column; gap: 14px; }
     .auth-card h2 { text-align: center; font-size: 1.4rem; }
@@ -85,7 +74,6 @@
   </style>
 </head>
 <body>
-  <!-- Auth Modal -->
   <div id="auth-modal">
     <div class="auth-card">
       <h2>🧱 DynoBuild</h2>
@@ -99,7 +87,6 @@
     </div>
   </div>
 
-  <!-- Top Navigation Bar -->
   <div id="topbar">
     <div class="brand" onclick="switchTab('home')"><span>DB</span> DYNOBUILD</div>
     <div class="top-user">
@@ -108,7 +95,6 @@
     </div>
   </div>
 
-  <!-- Portal Shell -->
   <div id="app-shell">
     <div id="sidebar">
       <div class="nav-item active" id="nav-home" onclick="switchTab('home')">🏠 Home</div>
@@ -118,7 +104,6 @@
     </div>
 
     <div id="main-content">
-      <!-- HOME VIEW -->
       <div id="home-view">
         <div class="welcome-banner">
           <div class="avatar-circle" id="home-avatar-badge">🧱</div>
@@ -128,7 +113,6 @@
           </div>
         </div>
 
-        <!-- Friends Section -->
         <div class="section-header">
           <h2 id="friends-count-title">Friends (0)</h2>
           <div style="display:flex; gap:8px;">
@@ -140,14 +124,12 @@
           <p style="color:#64748b; font-size:0.9rem;">No friends added yet. Search a username above to connect!</p>
         </div>
 
-        <!-- Recommended / Active Experiences -->
         <div class="section-header">
           <h2>Recommended For You</h2>
         </div>
         <div class="game-grid" id="home-game-grid"></div>
       </div>
 
-      <!-- DISCOVER VIEW -->
       <div id="discover-view" style="display:none;">
         <div class="section-header">
           <h2>All Experiences on DynoBuild</h2>
@@ -155,7 +137,6 @@
         <div class="game-grid" id="discover-game-grid"></div>
       </div>
 
-      <!-- AVATAR CUSTOMIZER VIEW -->
       <div id="avatar-view">
         <div id="avatar-preview-box"></div>
         <div class="avatar-controls">
@@ -198,7 +179,6 @@
     </div>
   </div>
 
-  <!-- 3D Game & Studio Viewport -->
   <div id="viewport-container">
     <div id="hud-controls">
       <button class="danger" onclick="exitWorldToHome()">⬅ Leave Game</button>
@@ -207,7 +187,6 @@
       </div>
     </div>
 
-    <!-- Studio Toolbar -->
     <div id="studio-toolbar">
       <input id="gameTitle" placeholder="World Name..." value="My Dyno World" style="width:140px" />
       <button onclick="studioAddBlock()">+ Part</button>
@@ -226,13 +205,11 @@
       <button style="background:#00b06f;" onclick="publishGame()">Publish</button>
     </div>
 
-    <!-- Leaderboard -->
     <div id="leaderboard">
       <h4>Players in Server</h4>
       <ul id="player-list"></ul>
     </div>
 
-    <!-- Chat Box -->
     <div id="chat-box">
       <div id="chat-messages"></div>
       <input id="chat-input" placeholder="Press Enter to chat..." />
