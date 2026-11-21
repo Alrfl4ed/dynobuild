@@ -1,13 +1,11 @@
 const socket = io();
 
-// Current Logged-In User State
 let currentUser = {
   username: "Guest_" + Math.floor(1000 + Math.random() * 9000),
   isGuest: true,
   avatar: { skin: "#fde047", shirt: "#3b82f6", pants: "#16a34a", hat: "none", face: "smile" }
 };
 
-// --- Authentication & Portal Tabs ---
 async function submitAuth(mode) {
   const username = document.getElementById('auth-user').value.trim();
   const password = document.getElementById('auth-pass').value;
@@ -50,7 +48,6 @@ function finishLogin() {
   document.getElementById('home-avatar-badge').style.background = currentUser.avatar.shirt;
   document.getElementById('home-avatar-badge').textContent = currentUser.username[0].toUpperCase();
 
-  // Sync Avatar Customizer inputs
   document.getElementById('av-skin').value = currentUser.avatar.skin;
   document.getElementById('av-shirt').value = currentUser.avatar.shirt;
   document.getElementById('av-pants').value = currentUser.avatar.pants;
@@ -63,7 +60,6 @@ function finishLogin() {
   switchTab('home');
 }
 
-// Auto-restore session if saved
 const savedSession = localStorage.getItem('dynobuild_user');
 if (savedSession) {
   try {
@@ -90,7 +86,6 @@ function switchTab(tab) {
   }
 }
 
-// --- Friends System ---
 async function loadFriends() {
   const strip = document.getElementById('friends-strip');
   if (currentUser.isGuest) {
@@ -142,7 +137,6 @@ async function addFriend() {
   loadFriends();
 }
 
-// --- Games Catalog ---
 async function loadGames() {
   const res = await fetch('/api/games');
   const games = await res.json();
@@ -164,7 +158,6 @@ async function loadGames() {
   document.getElementById('discover-game-grid').innerHTML = cardsHTML;
 }
 
-// --- 3D Avatar Mesh Builder (Used in Customizer & In-Game) ---
 function createFaceTexture(faceType, skinColor) {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -199,7 +192,6 @@ function createFaceTexture(faceType, skinColor) {
     ctx.arc(64, 84, 12, 0, Math.PI * 2);
     ctx.fill();
   } else {
-    // Classic smile
     ctx.beginPath();
     ctx.arc(44, 48, 7, 0, Math.PI * 2);
     ctx.arc(84, 48, 7, 0, Math.PI * 2);
@@ -216,28 +208,24 @@ function buildRobloxAvatar(av, username = null) {
   const cfg = av || currentUser.avatar;
   const group = new THREE.Group();
 
-  // Legs (Pants)
   const legMat = new THREE.MeshLambertMaterial({ color: cfg.pants });
   const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.0, 0.6), legMat);
   leftLeg.position.set(-0.3, 0.5, 0);
   const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.0, 0.6), legMat);
   rightLeg.position.set(0.3, 0.5, 0);
 
-  // Torso (Shirt)
   const torso = new THREE.Mesh(
     new THREE.BoxGeometry(1.2, 1.2, 0.65),
     new THREE.MeshLambertMaterial({ color: cfg.shirt })
   );
   torso.position.y = 1.6;
 
-  // Arms (Skin)
   const skinMat = new THREE.MeshLambertMaterial({ color: cfg.skin });
   const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.15, 0.55), skinMat);
   leftArm.position.set(-0.85, 1.6, 0);
   const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1.15, 0.55), skinMat);
   rightArm.position.set(0.85, 1.6, 0);
 
-  // Head with Face on Front (-Z is forward)
   const faceTex = createFaceTexture(cfg.face, cfg.skin);
   const headMats = [
     skinMat, skinMat, skinMat, skinMat, skinMat,
@@ -248,7 +236,6 @@ function buildRobloxAvatar(av, username = null) {
 
   group.add(leftLeg, rightLeg, torso, leftArm, rightArm, head);
 
-  // Hats
   if (cfg.hat === 'tophat') {
     const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.1, 16), new THREE.MeshLambertMaterial({ color: 0x111827 }));
     brim.position.y = 3.1;
@@ -281,7 +268,6 @@ function buildRobloxAvatar(av, username = null) {
   return group;
 }
 
-// --- Live 3D Avatar Customizer Preview ---
 let avScene, avCamera, avRenderer, avPreviewMesh;
 function initAvatarPreview() {
   const box = document.getElementById('avatar-preview-box');
@@ -322,7 +308,7 @@ function previewAvatarChange() {
   currentUser.avatar = updated;
   if (avPreviewMesh) avScene.remove(avPreviewMesh);
   avPreviewMesh = buildRobloxAvatar(updated, null);
-  avPreviewMesh.rotation.y = Math.PI; // Face camera initially
+  avPreviewMesh.rotation.y = Math.PI;
   avScene.add(avPreviewMesh);
 }
 
@@ -343,9 +329,6 @@ async function saveAvatarToAccount() {
   setTimeout(() => msg.textContent = "", 3000);
 }
 
-// ==========================================
-// 3D MULTIPLAYER & STUDIO ENGINE
-// ==========================================
 let scene, camera, renderer, transformControl, raycaster;
 let isStudio = false;
 let selfId = null;
@@ -540,7 +523,6 @@ function exitWorldToHome() {
   switchTab('home');
 }
 
-// --- Studio Mode ---
 function openStudio() {
   isStudio = true;
   spawnPoint = { x: 0, y: 4, z: 0 };
@@ -636,7 +618,6 @@ async function publishGame() {
   if (data.success) joinGame(data.gameId);
 }
 
-// --- Multiplayer Socket Events ---
 socket.on('initWorld', ({ game, players, selfId: id }) => {
   selfId = id;
   Object.values(playersState).forEach(p => scene.remove(p.mesh));
@@ -692,7 +673,6 @@ socket.on('chatMessage', ({ id, sender, msg }) => {
   setPlayerChatBubble(id, msg);
 });
 
-// --- Main Physics & Render Loop ---
 function animate() {
   requestAnimationFrame(animate);
   if (!myAvatar) return;
