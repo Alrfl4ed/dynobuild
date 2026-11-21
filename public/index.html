@@ -54,14 +54,14 @@
     .game-creator { font-size: 0.8rem; color: var(--text-muted); }
     .game-stats { font-size: 0.75rem; color: var(--text-muted); display: flex; justify-content: space-between; margin-top: 4px; }
 
-    /* OG AVATAR CATALOG STYLES WITH HATS & ACCESSORIES */
+    /* AVATAR CATALOG STYLES */
     .avatar-builder-grid { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
     .avatar-preview-box { background: #090d16; border: 1px solid var(--border-dark); border-radius: 8px; height: 320px; display: flex; align-items: center; justify-content: center; position: relative; }
     .customizer-options { display: flex; flex-direction: column; gap: 12px; background: var(--card-dark); padding: 16px; border-radius: 8px; border: 1px solid var(--border-dark); }
     .color-picker-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem; }
     .color-picker-row input, .customizer-options select { height: 35px; width: 140px; background: #0f172a; border: 1px solid var(--border-dark); color: white; border-radius: 4px; padding: 4px 8px; cursor: pointer; }
 
-    /* ROBLOX STUDIO STYLE IDE LAYOUT */
+    /* ROBLOX STUDIO IDE LAYOUT */
     #tab-studio { display: none; height: 100%; flex-direction: column; }
     .studio-ribbon { background: #1e293b; border-bottom: 1px solid var(--border-dark); padding: 8px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .studio-ribbon .divider { width: 1px; height: 24px; background: var(--border-dark); margin: 0 4px; }
@@ -72,7 +72,8 @@
 
     .studio-workspace { flex: 1; display: grid; grid-template-columns: 1fr 290px; overflow: hidden; }
     .studio-center { position: relative; background: #090d16; overflow: hidden; display: flex; flex-direction: column; }
-    #studio-3d-canvas { width: 100%; height: 100%; display: block; }
+    #studio-3d-canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+    #studio-3d-canvas:active { cursor: grabbing; }
     #studio-script-editor { display: none; width: 100%; height: 100%; background: #0d1117; color: #e6edf3; font-family: monospace; font-size: 14px; padding: 16px; border: none; outline: none; resize: none; }
 
     .studio-right-dock { background: var(--panel-dark); border-left: 1px solid var(--border-dark); display: flex; flex-direction: column; overflow: hidden; }
@@ -204,10 +205,10 @@
 
         <div class="studio-workspace">
           <div class="studio-center" id="studio-center-container">
-            <canvas id="studio-3d-canvas"></canvas>
+            <canvas id="studio-3d-canvas" oncontextmenu="return false;"></canvas>
             <textarea id="studio-script-editor" placeholder="// Write custom JavaScript game logic here..."></textarea>
             <div id="studio-playtest-hint" style="display:none; position:absolute; top:10px; left:10px; background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:6px; font-size:0.8rem; color:#4ade80;">
-              Playtesting Active — Use WASD or Arrow keys to move!
+              Playtesting Active — Hold Right-Click + Drag to look, WASD to move!
             </div>
           </div>
 
@@ -292,7 +293,7 @@
   </div>
 
   <!-- FULLSCREEN PLAY VIEWPORT -->
-  <div id="game-canvas-container">
+  <div id="game-canvas-container" oncontextmenu="return false;">
     <div class="game-hud">
       <button onclick="leaveGame()" style="background:#ef4444; color:white;">Leave Game</button>
       <span id="game-hud-title" style="color:white; font-weight:bold; align-self:center;">Game Title</span>
@@ -493,10 +494,30 @@
       const shirt = avatarConfig?.shirt || '#3b82f6';
       const pants = avatarConfig?.pants || '#16a34a';
       const hat = avatarConfig?.hat || 'none';
+      const faceStyle = avatarConfig?.face || 'smile';
 
       // Head
       const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), new THREE.MeshLambertMaterial({color: skin}));
       head.position.y = 1.6; group.add(head);
+
+      // Face Decal / Feature on front of head (Z = 0.41, facing forward)
+      const faceMat = new THREE.MeshBasicMaterial({color: 0x111111});
+      if (faceStyle === 'smile') {
+        const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.02), faceMat); eye1.position.set(-0.2, 1.75, 0.41);
+        const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.02), faceMat); eye2.position.set(0.2, 1.75, 0.41);
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.08, 0.02), faceMat); mouth.position.set(0, 1.45, 0.41);
+        group.add(eye1); group.add(eye2); group.add(mouth);
+      } else if (faceStyle === 'grrin') {
+        const eye1 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.02), faceMat); eye1.position.set(-0.2, 1.75, 0.41);
+        const eye2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.02), faceMat); eye2.position.set(0.2, 1.75, 0.41);
+        const grin = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 0.02), faceMat); grin.position.set(0, 1.45, 0.41);
+        group.add(eye1); group.add(eye2); group.add(grin);
+      } else if (faceStyle === 'cool') {
+        const shades = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.04), new THREE.MeshLambertMaterial({color: 0x000000}));
+        shades.position.set(0, 1.72, 0.41);
+        const smile = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.02), faceMat); smile.position.set(0, 1.45, 0.41);
+        group.add(shades); group.add(smile);
+      }
 
       // Hat accessory
       if (hat === 'tophat') {
@@ -650,7 +671,7 @@
       alert(`${target} has been banned.`);
     }
 
-    // --- ROBLOX STUDIO STYLE EDITOR & LIVE PLAYTEST ---
+    // --- ROBLOX STUDIO STYLE EDITOR & LIVE PLAYTEST (RIGHT CLICK LOOK) ---
     let studioBlocks = [
       { name: 'Baseplate', x: 0, y: -0.5, z: 0, w: 40, h: 1, d: 40, color: '#4ade80', script: 'solid' },
       { name: 'SpawnPad', x: 0, y: 0.2, z: 0, w: 6, h: 0.4, d: 6, color: '#94a3b8', script: 'checkpoint' }
@@ -686,15 +707,40 @@
 
       rebuildStudio3D();
 
+      let isRightMouseDown = false;
+      let studioCamAngleY = 0;
+      let studioCamAngleX = 0.5;
+
+      canvas.onmousedown = (e) => {
+        if (e.button === 2) isRightMouseDown = true; // Right click
+      };
+      window.onmouseup = (e) => {
+        if (e.button === 2) isRightMouseDown = false;
+      };
+      window.onmousemove = (e) => {
+        if (!isRightMouseDown) return;
+        studioCamAngleY -= e.movementX * 0.005;
+        studioCamAngleX = Math.max(0.1, Math.min(1.4, studioCamAngleX - e.movementY * 0.005));
+      };
+
       function studioLoop() {
         requestAnimationFrame(studioLoop);
         if (isStudioPlaytesting && studioPlayerGroup) {
-          if (keys['w'] || keys['arrowup']) studioPlayerGroup.position.z -= 0.15;
-          if (keys['s'] || keys['arrowdown']) studioPlayerGroup.position.z += 0.15;
-          if (keys['a'] || keys['arrowleft']) studioPlayerGroup.position.x -= 0.15;
-          if (keys['d'] || keys['arrowright']) studioPlayerGroup.position.x += 0.15;
-          studioCamera.position.set(studioPlayerGroup.position.x, studioPlayerGroup.position.y + 6, studioPlayerGroup.position.z + 10);
-          studioCamera.lookAt(studioPlayerGroup.position);
+          let moveX = 0, moveZ = 0;
+          if (keys['w'] || keys['arrowup']) moveZ -= 0.15;
+          if (keys['s'] || keys['arrowdown']) moveZ += 0.15;
+          if (keys['a'] || keys['arrowleft']) moveX -= 0.15;
+          if (keys['d'] || keys['arrowright']) moveX += 0.15;
+
+          studioPlayerGroup.position.x += moveX * Math.cos(studioCamAngleY) - moveZ * Math.sin(studioCamAngleY);
+          studioPlayerGroup.position.z += moveX * Math.sin(studioCamAngleY) + moveZ * Math.cos(studioCamAngleY);
+          studioPlayerGroup.rotation.y = studioCamAngleY;
+
+          const dist = 10;
+          studioCamera.position.x = studioPlayerGroup.position.x + dist * Math.sin(studioCamAngleY) * Math.cos(studioCamAngleX);
+          studioCamera.position.y = studioPlayerGroup.position.y + dist * Math.sin(studioCamAngleX);
+          studioCamera.position.z = studioPlayerGroup.position.z + dist * Math.cos(studioCamAngleY) * Math.cos(studioCamAngleX);
+          studioCamera.lookAt(studioPlayerGroup.position.x, studioPlayerGroup.position.y + 1, studioPlayerGroup.position.z);
         }
         studioRenderer.render(studioScene, studioCamera);
       }
@@ -835,7 +881,7 @@
       }
     }
 
-    // --- MULTIPLAYER PLAY VIEWPORT WITH MOUSE LOOK & BLOCK-MAN ---
+    // --- MULTIPLAYER PLAY VIEWPORT WITH RIGHT-CLICK LOOK & BLOCK-MAN ---
     function joinGame(gameId) {
       document.getElementById('game-canvas-container').style.display = 'block';
       let recent = JSON.parse(localStorage.getItem('dyno_recent') || '[]');
@@ -880,7 +926,7 @@
       scene.background = new THREE.Color(0x0f172a);
       const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       const renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(container.innerWidth || window.innerWidth, window.innerHeight);
+      renderer.setSize(window.innerWidth, window.innerHeight);
       container.appendChild(renderer.domElement);
 
       scene.add(new THREE.DirectionalLight(0xffffff, 1).position.set(10, 20, 10));
@@ -898,15 +944,19 @@
       player.position.set(0, 0.5, 0);
       scene.add(player);
 
-      // Mouse look controls
-      let isMouseDown = false;
+      // Right-click look controls
+      let isRightMouseDown = false;
       let mouseAngleY = 0;
       let mouseAngleX = 0.3;
 
-      container.onmousedown = () => isMouseDown = true;
-      window.onmouseup = () => isMouseDown = false;
+      container.onmousedown = (e) => {
+        if (e.button === 2) isRightMouseDown = true;
+      };
+      window.onmouseup = (e) => {
+        if (e.button === 2) isRightMouseDown = false;
+      };
       window.onmousemove = (e) => {
-        if (!isMouseDown) return;
+        if (!isRightMouseDown) return;
         mouseAngleY -= e.movementX * 0.005;
         mouseAngleX = Math.max(0.1, Math.min(1.2, mouseAngleX - e.movementY * 0.005));
       };
