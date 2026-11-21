@@ -68,7 +68,7 @@ app.post('/api/register', async (req, res) => {
     if (pool) {
       const existing = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [cleanUser]);
       if (existing.rows.length > 0) {
-        return.status(400).json({ success: false, error: "Username already taken." });
+        return res.status(400).json({ success: false, error: "Username already taken." });
       }
 
       const defaultAvatar = { skin: '#fde047', shirt: '#3b82f6', pants: '#16a34a', hat: 'none', face: 'smile' };
