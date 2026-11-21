@@ -41,10 +41,10 @@ const memGames = {
     creator: "DynoAdmin",
     thumbColor: "#38bdf8",
     blocks: [
-      { x: 0, y: -0.5, z: 0, w: 40, h: 1, d: 40, rx: 0, ry: 0, rz: 0, color: "#4ade80", script: "solid" },
-      { x: 0, y: 0.5, z: -8, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#38bdf8", script: "jumppad" },
-      { x: 7, y: 0.5, z: 5, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#ef4444", script: "kill" },
-      { x: -7, y: 0.5, z: 5, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#facc15", script: "checkpoint" }
+      { x: 0, y: -0.5, z: 0, w: 40, h: 1, d: 40, color: "#4ade80", script: "solid" },
+      { x: 0, y: 0.5, z: -8, w: 4, h: 1, d: 4, color: "#38bdf8", script: "jumppad" },
+      { x: 7, y: 0.5, z: 5, w: 4, h: 1, d: 4, color: "#ef4444", script: "kill" },
+      { x: -7, y: 0.5, z: 5, w: 4, h: 1, d: 4, color: "#facc15", script: "checkpoint" }
     ],
     visits: 1337,
     created_at: new Date().toISOString(),
@@ -67,6 +67,15 @@ function filterChat(msg) {
   return clean;
 }
 
+function computeBadges(username, existingBadges = [], totalVisits = 0) {
+  const set = new Set(Array.isArray(existingBadges) ? existingBadges : []);
+  const lower = String(username || '').toLowerCase();
+  if (lower === '7lol7' || lower === 'dynobuild') set.add('admin');
+  if (new Date() < new Date('2026-12-01')) set.add('og');
+  if (totalVisits >= 1000) set.add('developer');
+  return [...set];
+}
+
 async function initDB() {
   if (!pool) return;
   await pool.query(`
@@ -74,34 +83,39 @@ async function initDB() {
       username TEXT PRIMARY KEY,
       pass_hash TEXT NOT NULL,
       avatar JSONB NOT NULL,
-      friends JSONB NOT NULL DEFAULT '[]',
-      dybux INT DEFAULT 100,
-      last_daily TEXT DEFAULT '',
-      badges JSONB DEFAULT '[]',
-      banned BOOLEAN DEFAULT false
+      friends JSONB NOT NULL DEFAULT '[]'
     );
   `);
+  // Upgrade existing users table safely
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS dybux INT DEFAULT 100;`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_daily TEXT DEFAULT '';`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS badges JSONB DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT false;`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS games (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       creator TEXT NOT NULL,
       thumb_color TEXT DEFAULT '#2563eb',
-      blocks JSONB NOT NULL,
-      visits INT DEFAULT 0,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      gamepasses JSONB DEFAULT '[]',
-      custom_code TEXT DEFAULT ''
+      blocks JSONB NOT NULL
     );
   `);
-  const { rows } = await pool.query('SELECT COUNT(*) FROM games');
-  if (parseInt(rows[0].count) === 0) {
-    const def = memGames["default-plaza"];
-    await pool.query(
-      'INSERT INTO games (id, title, creator, thumb_color, blocks, visits) VALUES ($1, $2, $3, $4, $5, $6)',
-      [def.id, def.title, def.creator, def.thumbColor, JSON.stringify(def.blocks), def.visits]
-    );
-  }
+  // Upgrade existing games table safely
+  await pool.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS visits INT DEFAULT 0;`);
+  await pool.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+  await pool.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS gamepasses JSONB DEFAULT '[]';`);
+  await pool.query(`ALTER TABLE games ADD COLUMN IF NOT EXISTS custom_code TEXT DEFAULT '';`);
+
+  // Always ensure DynoBuild Crossroads test game exists
+  const def = memGames["default-plaza"];
+  await pool.query(
+    `INSERT INTO games (id, title, creator, thumb_color, blocks, visits) 
+     VALUES ($1, $2, $3, $4, $5, $6) 
+     ON CONFLICT (id) DO NOTHING`,
+    [def.id, def.title, def.creator, def.thumbColor, JSON.stringify(def.blocks), def.visits]
+  );
+  console.log("Database tables verified and test game restored.");
 }
 initDB().catch(console.error);
 
@@ -125,10 +139,7 @@ app.post('/api/register', async (req, res) => {
     const existing = await getUser(username);
     if (existing) return res.status(400).json({ error: "Username is already taken." });
 
-    const initialBadges = [];
-    if (new Date() < new Date('2026-12-01')) {
-      initialBadges.push('og');
-    }
+    const initialBadges = computeBadges(username, [], 0);
 
     if (pool) {
       await pool.query(
@@ -148,6 +159,7 @@ app.post('/api/register', async (req, res) => {
     }
     res.json({ success: true, user: { username, avatar: defaultAvatar, friends: [], dybux: 100, badges: initialBadges } });
   } catch (err) {
+    console.error("Register error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -163,17 +175,26 @@ app.post('/api/login', async (req, res) => {
     if (user.banned) {
       return res.status(403).json({ error: "This account has been banned." });
     }
+
+    let totalVisits = 0;
+    if (pool) {
+      const { rows } = await pool.query('SELECT SUM(visits) as total FROM games WHERE LOWER(creator) = LOWER($1)', [user.username]);
+      totalVisits = parseInt(rows[0]?.total || 0);
+    }
+    const updatedBadges = computeBadges(user.username, user.badges, totalVisits);
+
     res.json({
       success: true,
-      user: { 
-        username: user.username, 
-        avatar: user.avatar, 
+      user: {
+        username: user.username,
+        avatar: user.avatar,
         friends: user.friends || [],
-        dybux: user.dybux || 100,
-        badges: user.badges || []
+        dybux: user.dybux ?? 100,
+        badges: updatedBadges
       }
     });
   } catch (err) {
+    console.error("Login error:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -189,7 +210,7 @@ app.post('/api/daily-reward', async (req, res) => {
       return res.status(400).json({ error: "Already claimed today's Dybux!" });
     }
 
-    const newDybux = (user.dybux || 100) + 50;
+    const newDybux = (user.dybux ?? 100) + 50;
     if (pool) {
       await pool.query('UPDATE users SET dybux = $1, last_daily = $2 WHERE username = $3', [newDybux, today, user.username]);
     } else {
@@ -207,20 +228,19 @@ app.get('/api/profile/:username', async (req, res) => {
     const target = await getUser(req.params.username);
     if (!target) return res.status(404).json({ error: "User not found" });
 
-    let badges = target.badges || [];
+    let totalVisits = 0;
     if (pool) {
       const { rows } = await pool.query('SELECT SUM(visits) as total FROM games WHERE LOWER(creator) = LOWER($1)', [target.username]);
-      if (rows[0] && parseInt(rows[0].total || 0) >= 1000 && !badges.includes('developer')) {
-        badges.push('developer');
-      }
+      totalVisits = parseInt(rows[0]?.total || 0);
     }
+    const badges = computeBadges(target.username, target.badges, totalVisits);
 
     res.json({
       username: target.username,
       avatar: target.avatar,
       friends: target.friends || [],
-      dybux: target.dybux || 100,
-      badges: badges
+      dybux: target.dybux ?? 100,
+      badges
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -235,9 +255,9 @@ app.post('/api/admin/ban', async (req, res) => {
       return res.status(403).json({ error: "Unauthorized admin action." });
     }
     if (pool) {
-      await pool.query('UPDATE users SET banned = true WHERE username = $1', [targetUser]);
+      await pool.query('UPDATE users SET banned = true WHERE LOWER(username) = LOWER($1)', [targetUser]);
     } else {
-      const u = memUsers[targetUser.toLowerCase()];
+      const u = memUsers[String(targetUser).toLowerCase()];
       if (u) u.banned = true;
     }
     res.json({ success: true });
@@ -245,6 +265,9 @@ app.post('/api/admin/ban', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+const onlineUsers = {};
+const activeRooms = {};
 
 app.get('/api/games', async (req, res) => {
   try {
@@ -272,120 +295,21 @@ app.get('/api/games', async (req, res) => {
 
 app.post('/api/games', async (req, res) => {
   try {
-    const { title, creator, blocks, gamepasses, customCode } = req.body;
+    const { title, creator, blocks, gamepasses, customCode, thumbColor } = req.body;
     const id = 'game-' + Date.now();
     const safeTitle = String(title || "Untitled Place").slice(0, 40);
     const safeCreator = String(creator || "Builder").slice(0, 24);
-    const colors = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2"];
-    const thumbColor = colors[Math.floor(Math.random() * colors.length)];
+    const color = thumbColor || "#2563eb";
 
     if (pool) {
       await pool.query(
         'INSERT INTO games (id, title, creator, thumb_color, blocks, visits, gamepasses, custom_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-        [id, safeTitle, safeCreator, thumbColor, JSON.stringify(blocks || []), 0, JSON.stringify(gamepasses || []), customCode || '']
+        [id, safeTitle, safeCreator, color, JSON.stringify(blocks || []), 0, JSON.stringify(gamepasses || []), customCode || '']
       );
     } else {
-      memGames[id] = { id, title: safeTitle, creator: safeCreator, thumbColor, blocks: blocks || [], visits: 0, gamepasses: gamepasses || [], customCode: customCode || '' };
+      memGames[id] = { id, title: safeTitle, creator: safeCreator, thumbColor: color, blocks: blocks || [], visits: 0, gamepasses: gamepasses || [], customCode: customCode || '' };
     }
     res.json({ success: true, gameId: id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/games/:id/edit', async (req, res) => {
-  try {
-    const gameId = req.params.id;
-    const { title, blocks, gamepasses, customCode, thumbColor } = req.body;
-    
-    if (pool) {
-      await pool.query(
-        'UPDATE games SET title = COALESCE($1, title), blocks = COALESCE($2, blocks), gamepasses = COALESCE($3, gamepasses), custom_code = COALESCE($4, custom_code), thumb_color = COALESCE($5, thumb_color) WHERE id = $6',
-        [title, blocks ? JSON.stringify(blocks) : null, gamepasses ? JSON.stringify(gamepasses) : null, customCode, thumbColor, gameId]
-      );
-    } else if (memGames[gameId]) {
-      if (title) memGames[gameId].title = title;
-      if (blocks) memGames[gameId].blocks = blocks;
-      if (gamepasses) memGames[gameId].gamepasses = gamepasses;
-      if (customCode !== undefined) memGames[gameId].customCode = customCode;
-      if (thumbColor) memGames[gameId].thumbColor = thumbColor;
-    }
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-const onlineUsers = {};
-const activeRooms = {};
-
-app.post('/api/avatar', async (req, res) => {
-  try {
-    const { username, avatar } = req.body;
-    const user = await getUser(username);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    if (pool) {
-      await pool.query('UPDATE users SET avatar = $1 WHERE username = $2', [JSON.stringify(avatar), user.username]);
-    } else {
-      user.avatar = avatar;
-    }
-    res.json({ success: true, avatar });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/friends/:username', async (req, res) => {
-  try {
-    const user = await getUser(req.params.username);
-    if (!user) return res.json([]);
-    const friendNames = user.friends || [];
-    const detailed = [];
-
-    for (const fName of friendNames) {
-      const fUser = await getUser(fName);
-      const live = onlineUsers[fName.toLowerCase()];
-      detailed.push({
-        username: fUser ? fUser.username : fName,
-        avatar: fUser ? fUser.avatar : defaultAvatar,
-        online: !!live,
-        status: live ? live.status : 'Offline',
-        gameId: live ? live.gameId : null,
-        gameTitle: live ? live.gameTitle : null
-      });
-    }
-    res.json(detailed);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/friends/add', async (req, res) => {
-  try {
-    const { username, friendUsername } = req.body;
-    const user = await getUser(username);
-    const target = await getUser(friendUsername);
-
-    if (!user) return res.status(404).json({ error: "Not logged in." });
-    if (!target) return res.status(404).json({ error: "Player not found." });
-    if (user.username.toLowerCase() === target.username.toLowerCase()) {
-      return res.status(400).json({ error: "You cannot add yourself." });
-    }
-
-    const myFriends = new Set(user.friends || []);
-    myFriends.add(target.username);
-    const theirFriends = new Set(target.friends || []);
-    theirFriends.add(user.username);
-
-    if (pool) {
-      await pool.query('UPDATE users SET friends = $1 WHERE username = $2', [JSON.stringify([...myFriends]), user.username]);
-      await pool.query('UPDATE users SET friends = $1 WHERE username = $2', [JSON.stringify([...theirFriends]), target.username]);
-    } else {
-      user.friends = [...myFriends];
-      target.friends = [...theirFriends];
-    }
-    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -414,11 +338,6 @@ io.on('connection', (socket) => {
       socket.leave(currentRoom);
       currentRoom = null;
     }
-    if (loggedUsername && onlineUsers[loggedUsername.toLowerCase()]) {
-      onlineUsers[loggedUsername.toLowerCase()].status = 'Online';
-      onlineUsers[loggedUsername.toLowerCase()].gameId = null;
-      onlineUsers[loggedUsername.toLowerCase()].gameTitle = null;
-    }
   });
 
   socket.on('joinGame', async ({ gameId, username, avatar }) => {
@@ -427,7 +346,7 @@ io.on('connection', (socket) => {
       const { rows } = await pool.query('SELECT * FROM games WHERE id = $1', [gameId]);
       gameData = rows[0];
       if (gameData) {
-        await pool.query('UPDATE games SET visits = visits + 1 WHERE id = $1', [gameId]);
+        await pool.query('UPDATE games SET visits = COALESCE(visits, 0) + 1 WHERE id = $1', [gameId]);
         gameData.visits = (gameData.visits || 0) + 1;
       }
     } else {
@@ -446,12 +365,6 @@ io.on('connection', (socket) => {
     socket.join(gameId);
 
     const displayUser = String(username || `Guest_${socket.id.slice(0, 4)}`).slice(0, 20);
-    if (loggedUsername && onlineUsers[loggedUsername.toLowerCase()]) {
-      onlineUsers[loggedUsername.toLowerCase()].status = 'In-Game';
-      onlineUsers[loggedUsername.toLowerCase()].gameId = gameId;
-      onlineUsers[loggedUsername.toLowerCase()].gameTitle = gameData.title;
-    }
-
     if (!activeRooms[gameId]) activeRooms[gameId] = {};
     activeRooms[gameId][socket.id] = {
       id: socket.id,
@@ -485,6 +398,7 @@ io.on('connection', (socket) => {
   socket.on('chat', (msg) => {
     if (!currentRoom || !activeRooms[currentRoom]?.[socket.id]) return;
     const sender = activeRooms[currentRoom][socket.id].username;
+    if (sender.startsWith('Guest_')) return; // Guests cannot chat
     const cleanMsg = filterChat(msg);
     if (!cleanMsg) return;
     io.to(currentRoom).emit('chatMessage', { id: socket.id, sender, msg: cleanMsg });
@@ -495,9 +409,7 @@ io.on('connection', (socket) => {
       delete activeRooms[currentRoom][socket.id];
       io.to(currentRoom).emit('playerLeft', socket.id);
     }
-    if (loggedUsername) {
-      delete onlineUsers[loggedUsername.toLowerCase()];
-    }
+    if (loggedUsername) delete onlineUsers[loggedUsername.toLowerCase()];
   });
 });
 
