@@ -76,6 +76,7 @@
   </style>
 </head>
 <body>
+  <!-- Auth Modal -->
   <div id="auth-modal">
     <div class="auth-card">
       <h2>🧱 DynoBuild</h2>
@@ -374,6 +375,54 @@
         console.error('Publish error:', err);
         alert('Could not connect to server.');
       }
+    }
+
+    async function submitAuth(type) {
+      const usernameInput = document.getElementById('auth-user').value.trim();
+      const passwordInput = document.getElementById('auth-pass').value;
+      const errorEl = document.getElementById('auth-error');
+      
+      if (!usernameInput || !passwordInput) {
+        errorEl.innerText = 'Please enter both username and password.';
+        return;
+      }
+
+      try {
+        const endpoint = type === 'login' ? '/api/login' : '/api/register';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: usernameInput, password: passwordInput })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          localStorage.setItem('dyno_user', JSON.stringify(data.user));
+          document.getElementById('auth-modal').style.display = 'none';
+          document.getElementById('top-username').innerText = data.user.username;
+          if (document.getElementById('welcome-text')) {
+            document.getElementById('welcome-text').innerText = `Welcome back, ${data.user.username}!`;
+          }
+          updateDybuxDisplay();
+          if (typeof loadGames === 'function') loadGames();
+        } else {
+          errorEl.innerText = data.error || 'Authentication failed.';
+        }
+      } catch (err) {
+        console.error('Auth error:', err);
+        errorEl.innerText = 'Could not connect to server.';
+      }
+    }
+
+    function continueAsGuest() {
+      const guestUser = { username: "Guest", dybux: 100, avatar: {} };
+      localStorage.setItem('dyno_user', JSON.stringify(guestUser));
+      document.getElementById('auth-modal').style.display = 'none';
+    }
+
+    function logoutUser() {
+      localStorage.removeItem('dyno_user');
+      location.reload();
     }
 
     function switchTab(tabName) {
