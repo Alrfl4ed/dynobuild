@@ -58,15 +58,16 @@ initDB();
 
 // Register
 app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
+  const username = req.body.username ? String(req.body.username).trim() : '';
+  const password = req.body.password ? String(req.body.password).trim() : '';
+  
   if (!username || username.length < 3 || !password) {
     return res.status(400).json({ success: false, error: "Invalid username or password." });
   }
 
-  const cleanUser = username.trim();
   try {
     if (pool) {
-      const existing = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [cleanUser]);
+      const existing = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
       if (existing.rows.length > 0) {
         return res.status(400).json({ success: false, error: "Username already taken." });
       }
@@ -74,11 +75,11 @@ app.post('/api/register', async (req, res) => {
       const defaultAvatar = { skin: '#fde047', shirt: '#3b82f6', pants: '#16a34a', hat: 'none', face: 'smile' };
       const insert = await pool.query(
         'INSERT INTO users (username, password, dybux, avatar, badges) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [cleanUser, password, 100, JSON.stringify(defaultAvatar), ['og']]
+        [username, password, 100, JSON.stringify(defaultAvatar), ['og']]
       );
       return res.json({ success: true, user: insert.rows[0] });
     } else {
-      return res.json({ success: true, user: { username: cleanUser, dybux: 100, avatar: {}, badges: ['og'] } });
+      return res.json({ success: true, user: { username, dybux: 100, avatar: {}, badges: ['og'] } });
     }
   } catch (err) {
     console.error("Register error:", err);
@@ -88,21 +89,30 @@ app.post('/api/register', async (req, res) => {
 
 // Login
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
+  const username = req.body.username ? String(req.body.username).trim() : '';
+  const password = req.body.password ? String(req.body.password).trim() : '';
+
   if (!username || !password) {
     return res.status(400).json({ success: false, error: "Missing username or password." });
   }
 
-  const cleanUser = username.trim();
   try {
     if (pool) {
-      const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [cleanUser]);
-      if (result.rows.length === 0 || result.rows[0].password !== password) {
+      const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
+      if (result.rows.length === 0) {
+        console.log(`[Auth] Login failed: User '${username}' not found in database.`);
         return res.status(401).json({ success: false, error: "Incorrect username or password." });
       }
+
+      if (result.rows[0].password !== password) {
+        console.log(`[Auth] Login failed for '${username}': Password mismatch.`);
+        return res.status(401).json({ success: false, error: "Incorrect username or password." });
+      }
+
+      console.log(`[Auth] Successful login for '${username}'`);
       return res.json({ success: true, user: result.rows[0] });
     } else {
-      return res.json({ success: true, user: { username: cleanUser, dybux: 100, avatar: {}, badges: ['og'] } });
+      return res.json({ success: true, user: { username, dybux: 100, avatar: {}, badges: ['og'] } });
     }
   } catch (err) {
     console.error("Login error:", err);
@@ -117,7 +127,7 @@ app.post('/api/avatar', async (req, res) => {
 
   try {
     if (pool) {
-      await pool.query('UPDATE users SET avatar = $1 WHERE LOWER(username) = LOWER($2)', [JSON.stringify(avatar), username.trim()]);
+      await pool.query('UPDATE users SET avatar = $1 WHERE LOWER(username) = LOWER($2)', [JSON.stringify(avatar), String(username).trim()]);
     }
     res.json({ success: true });
   } catch (err) {
@@ -192,7 +202,7 @@ app.post('/api/games', async (req, res) => {
   try {
     if (pool) {
       const insert = await pool.query(
-        'INSERT INTO games (title, creator, blocks, customCode, thumbColor, visits) VALUES ($1, $2, $3, $4, $5, $0) RETURNING id',
+        'INSERT INTO games (title, creator, blocks, customCode, thumbColor, visits) VALUES ($1, $2, $3, $4, $5, 0) RETURNING id',
         [title || 'Untitled', creator || 'Builder', JSON.stringify(blocks || []), customCode || '', thumbColor || '#00a2ff']
       );
       return res.json({ success: true, gameId: insert.rows[0].id });
