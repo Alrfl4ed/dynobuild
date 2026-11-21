@@ -11,7 +11,7 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// --- Database Setup (Render PostgreSQL with In-Memory Fallback) ---
+// --- Database Setup (Neon / PostgreSQL with In-Memory Fallback) ---
 let pool = null;
 if (process.env.DATABASE_URL) {
   try {
@@ -45,12 +45,27 @@ const memGames = {
       { x: 0, y: 0.5, z: -8, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#38bdf8", script: "jumppad" },
       { x: 7, y: 0.5, z: 5, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#ef4444", script: "kill" },
       { x: -7, y: 0.5, z: 5, w: 4, h: 1, d: 4, rx: 0, ry: 0, rz: 0, color: "#facc15", script: "checkpoint" }
-    ]
+    ],
+    visits: 1337,
+    created_at: new Date().toISOString(),
+    gamepasses: [],
+    custom_code: ''
   }
 };
 
 function hashPassword(pw) {
   return crypto.createHash('sha256').update(String(pw)).digest('hex');
+}
+
+// Simple Chat Filter / Safe Chat
+function filterChat(msg) {
+  const badWords = ['badword1', 'badword2']; // Expand word list as needed
+  let clean = String(msg).trim().slice(0, 100);
+  badWords.forEach(word => {
+    const regex = new RegExp(word, 'gi');
+    clean = clean.replace(regex, '####');
+  });
+  return clean;
 }
 
 async function initDB() {
@@ -60,7 +75,11 @@ async function initDB() {
       username TEXT PRIMARY KEY,
       pass_hash TEXT NOT NULL,
       avatar JSONB NOT NULL,
-      friends JSONB NOT NULL DEFAULT '[]'
+      friends JSONB NOT NULL DEFAULT '[]',
+      dybux INT DEFAULT 100,
+      last_daily TEXT DEFAULT '',
+      badges JSONB DEFAULT '[]',
+      banned BOOLEAN DEFAULT false
     );
   `);
   await pool.query(`
@@ -69,15 +88,19 @@ async function initDB() {
       title TEXT NOT NULL,
       creator TEXT NOT NULL,
       thumb_color TEXT DEFAULT '#2563eb',
-      blocks JSONB NOT NULL
+      blocks JSONB NOT NULL,
+      visits INT DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      gamepasses JSONB DEFAULT '[]',
+      custom_code TEXT DEFAULT ''
     );
   `);
   const { rows } = await pool.query('SELECT COUNT(*) FROM games');
   if (parseInt(rows[0].count) === 0) {
     const def = memGames["default-plaza"];
     await pool.query(
-      'INSERT INTO games (id, title, creator, thumb_color, blocks) VALUES ($1, $2, $3, $4, $5)',
-      [def.id, def.title, def.creator, def.thumbColor, JSON.stringify(def.blocks)]
+      'INSERT INTO games (id, title, creator, thumb_color, blocks, visits) VALUES ($1, $2, $3, $4, $5, $6)',
+      [def.id, def.title, def.creator, def.thumbColor, JSON.stringify(def.blocks), def.visits]
     );
   }
 }
@@ -93,23 +116,7 @@ async function getUser(username) {
   return memUsers[clean.toLowerCase()] || null;
 }
 
-async function saveNewUser(username, passHash) {
-  if (pool) {
-    await pool.query(
-      'INSERT INTO users (username, pass_hash, avatar, friends) VALUES ($1, $2, $3, $4)',
-      [username, passHash, JSON.stringify(defaultAvatar), JSON.stringify([])]
-    );
-  } else {
-    memUsers[username.toLowerCase()] = {
-      username,
-      pass_hash: passHash,
-      avatar: { ...defaultAvatar },
-      friends: []
-    };
-  }
-}
-
-// --- Auth & Profile API ---
+// --- Auth & Profile APIs ---
 app.post('/api/register', async (req, res) => {
   try {
     const username = String(req.body.username || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 18);
@@ -120,8 +127,28 @@ app.post('/api/register', async (req, res) => {
     const existing = await getUser(username);
     if (existing) return res.status(400).json({ error: "Username is already taken." });
 
-    await saveNewUser(username, hashPassword(password));
-    res.json({ success: true, user: { username, avatar: defaultAvatar, friends: [] } });
+    const initialBadges = [];
+    if (new Date() < new Date('2026-12-01')) {
+      initialBadges.push('og'); // OG badge for joining before Dec 1
+    }
+
+    if (pool) {
+      await pool.query(
+        'INSERT INTO users (username, pass_hash, avatar, friends, dybux, badges) VALUES ($1, $2, $3, $4, $5, $6)',
+        [username, hashPassword(password), JSON.stringify(defaultAvatar), JSON.stringify([]), 100, JSON.stringify(initialBadges)]
+      );
+    } else {
+      memUsers[username.toLowerCase()] = {
+        username,
+        pass_hash: hashPassword(password),
+        avatar: { ...defaultAvatar },
+        friends: [],
+        dybux: 100,
+        badges: initialBadges,
+        banned: false
+      };
+    }
+    res.json({ success: true, user: { username, avatar: defaultAvatar, friends: [], dybux: 100, badges: initialBadges } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -135,14 +162,171 @@ app.post('/api/login', async (req, res) => {
     if (!user || user.pass_hash !== hashPassword(password)) {
       return res.status(401).json({ error: "Invalid username or password." });
     }
+    if (user.banned) {
+      return res.status(403).json({ error: "This account has been banned." });
+    }
     res.json({
       success: true,
-      user: { username: user.username, avatar: user.avatar, friends: user.friends || [] }
+      user: { 
+        username: user.username, 
+        avatar: user.avatar, 
+        friends: user.friends || [],
+        dybux: user.dybux || 100,
+        badges: user.badges || []
+      }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// --- Daily Dybux Reward ---
+app.post('/api/daily-reward', async (req, res) => {
+  try {
+    const { username } = req.body;
+    const user = await getUser(username);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const today = new Date().toISOString().slice(0, 10);
+    if (user.last_daily === today) {
+      return res.status(400).json({ error: "Already claimed today's Dybux!" });
+    }
+
+    const newDybux = (user.dybux || 100) + 50;
+    if (pool) {
+      await pool.query('UPDATE users SET dybux = $1, last_daily = $2 WHERE username = $3', [newDybux, today, user.username]);
+    } else {
+      user.dybux = newDybux;
+      user.last_daily = today;
+    }
+    res.json({ success: true, dybux: newDybux });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Profile & Search API ---
+app.get('/api/profile/:username', async (req, res) => {
+  try {
+    const target = await getUser(req.params.username);
+    if (!target) return res.status(404).json({ error: "User not found" });
+
+    // Calculate developer badge dynamically if any game has 1000+ visits
+    let badges = target.badges || [];
+    let creatorQuery = target.username;
+    if (pool) {
+      const { rows } = await pool.query('SELECT SUM(visits) as total FROM games WHERE LOWER(creator) = LOWER($1)', [creatorQuery]);
+      if (rows[0] && parseInt(rows[0].total || 0) >= 1000 && !badges.includes('developer')) {
+        badges.push('developer');
+      }
+    }
+
+    res.json({
+      username: target.username,
+      avatar: target.avatar,
+      friends: target.friends || [],
+      dybux: target.dybux || 100,
+      badges: badges
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Admin Ban Route (`7lol7` & `DynoBuild`) ---
+app.post('/api/admin/ban', async (req, res) => {
+  try {
+    const { adminUser, targetUser } = req.body;
+    const cleanAdmin = String(adminUser || '').toLowerCase();
+    if (cleanAdmin !== '7lol7' && cleanAdmin !== 'dynobuild') {
+      return res.status(403).json({ error: "Unauthorized admin action." });
+    }
+    if (pool) {
+      await pool.query('UPDATE users SET banned = true WHERE username = $1', [targetUser]);
+    } else {
+      const u = memUsers[targetUser.toLowerCase()];
+      if (u) u.banned = true;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- Games & Categories API ---
+app.get('/api/games', async (req, res) => {
+  try {
+    let gamesList = [];
+    if (pool) {
+      const { rows } = await pool.query('SELECT id, title, creator, thumb_color, visits, created_at FROM games');
+      gamesList = rows;
+    } else {
+      gamesList = Object.values(memGames);
+    }
+    const formatted = gamesList.map(g => ({
+      id: g.id,
+      title: g.title,
+      creator: g.creator,
+      thumbColor: g.thumb_color || g.thumbColor || "#2563eb",
+      visits: g.visits || 0,
+      createdAt: g.created_at || g.createdAt,
+      playerCount: activeRooms[g.id] ? Object.keys(activeRooms[g.id]).length : 0
+    }));
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/games', async (req, res) => {
+  try {
+    const { title, creator, blocks, gamepasses, customCode } = req.body;
+    const id = 'game-' + Date.now();
+    const safeTitle = String(title || "Untitled Place").slice(0, 40);
+    const safeCreator = String(creator || "Builder").slice(0, 24);
+    const colors = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2"];
+    const thumbColor = colors[Math.floor(Math.random() * colors.length)];
+
+    if (pool) {
+      await pool.query(
+        'INSERT INTO games (id, title, creator, thumb_color, blocks, visits, gamepasses, custom_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        [id, safeTitle, safeCreator, thumbColor, JSON.stringify(blocks || []), 0, JSON.stringify(gamepasses || []), customCode || '']
+      );
+    } else {
+      memGames[id] = { id, title: safeTitle, creator: safeCreator, thumbColor, blocks: blocks || [], visits: 0, gamepasses: gamepasses || [], customCode: customCode || '' };
+    }
+    res.json({ success: true, gameId: id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update / DynoStudio Edit Game Endpoint
+app.post('/api/games/:id/edit', async (req, res) => {
+  try {
+    const gameId = req.params.id;
+    const { title, blocks, gamepasses, customCode, thumbColor } = req.body;
+    
+    if (pool) {
+      await pool.query(
+        'UPDATE games SET title = COALESCE($1, title), blocks = COALESCE($2, blocks), gamepasses = COALESCE($3, gamepasses), custom_code = COALESCE($4, custom_code), thumb_color = COALESCE($5, thumb_color) WHERE id = $6',
+        [title, blocks ? JSON.stringify(blocks) : null, gamepasses ? JSON.stringify(gamepasses) : null, customCode, thumbColor, gameId]
+      );
+    } else if (memGames[gameId]) {
+      if (title) memGames[gameId].title = title;
+      if (blocks) memGames[gameId].blocks = blocks;
+      if (gamepasses) memGames[gameId].gamepasses = gamepasses;
+      if (customCode !== undefined) memGames[gameId].customCode = customCode;
+      if (thumbColor) memGames[gameId].thumbColor = thumbColor;
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const onlineUsers = {};
+const activeRooms = {};
 
 app.post('/api/avatar', async (req, res) => {
   try {
@@ -160,9 +344,6 @@ app.post('/api/avatar', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-const onlineUsers = {};
-const activeRooms = {};
 
 app.get('/api/friends/:username', async (req, res) => {
   try {
@@ -219,51 +400,6 @@ app.post('/api/friends/add', async (req, res) => {
   }
 });
 
-app.get('/api/games', async (req, res) => {
-  try {
-    let gamesList = [];
-    if (pool) {
-      const { rows } = await pool.query('SELECT id, title, creator, thumb_color FROM games');
-      gamesList = rows;
-    } else {
-      gamesList = Object.values(memGames);
-    }
-    const formatted = gamesList.map(g => ({
-      id: g.id,
-      title: g.title,
-      creator: g.creator,
-      thumbColor: g.thumb_color || g.thumbColor || "#2563eb",
-      playerCount: activeRooms[g.id] ? Object.keys(activeRooms[g.id]).length : 0
-    }));
-    res.json(formatted);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/games', async (req, res) => {
-  try {
-    const { title, creator, blocks } = req.body;
-    const id = 'game-' + Date.now();
-    const safeTitle = String(title || "Untitled Place").slice(0, 40);
-    const safeCreator = String(creator || "Builder").slice(0, 24);
-    const colors = ["#2563eb", "#16a34a", "#9333ea", "#ea580c", "#0891b2"];
-    const thumbColor = colors[Math.floor(Math.random() * colors.length)];
-
-    if (pool) {
-      await pool.query(
-        'INSERT INTO games (id, title, creator, thumb_color, blocks) VALUES ($1, $2, $3, $4, $5)',
-        [id, safeTitle, safeCreator, thumbColor, JSON.stringify(blocks)]
-      );
-    } else {
-      memGames[id] = { id, title: safeTitle, creator: safeCreator, thumbColor, blocks };
-    }
-    res.json({ success: true, gameId: id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 io.on('connection', (socket) => {
   let currentRoom = null;
   let loggedUsername = null;
@@ -299,8 +435,13 @@ io.on('connection', (socket) => {
     if (pool) {
       const { rows } = await pool.query('SELECT * FROM games WHERE id = $1', [gameId]);
       gameData = rows[0];
+      if (gameData) {
+        await pool.query('UPDATE games SET visits = visits + 1 WHERE id = $1', [gameId]);
+        gameData.visits = (gameData.visits || 0) + 1;
+      }
     } else {
       gameData = memGames[gameId];
+      if (gameData) gameData.visits = (gameData.visits || 0) + 1;
     }
     if (!gameData) return;
 
@@ -329,7 +470,14 @@ io.on('connection', (socket) => {
     };
 
     socket.emit('initWorld', {
-      game: gameData,
+      game: {
+        id: gameData.id,
+        title: gameData.title,
+        creator: gameData.creator,
+        thumbColor: gameData.thumb_color || gameData.thumbColor,
+        blocks: gameData.blocks,
+        customCode: gameData.custom_code || gameData.customCode || ''
+      },
       players: activeRooms[gameId],
       selfId: socket.id
     });
@@ -346,7 +494,7 @@ io.on('connection', (socket) => {
   socket.on('chat', (msg) => {
     if (!currentRoom || !activeRooms[currentRoom]?.[socket.id]) return;
     const sender = activeRooms[currentRoom][socket.id].username;
-    const cleanMsg = String(msg).trim().slice(0, 100);
+    const cleanMsg = filterChat(msg);
     if (!cleanMsg) return;
     io.to(currentRoom).emit('chatMessage', { id: socket.id, sender, msg: cleanMsg });
   });
@@ -363,4 +511,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`DynoBuild v3 running on port ${PORT}`));
+server.listen(PORT, () => console.log(`DynoBuild platform running on port ${PORT}`));
