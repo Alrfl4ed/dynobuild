@@ -1,1 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BlockVerse 3D Platform</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+    body { background: #111827; color: #f9fafb; overflow: hidden; }
+    
+    /* Navigation Bar */
+    #navbar { height: 52px; background: #1f2937; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid #374151; }
+    .brand { font-weight: 800; font-size: 1.2rem; color: #60a5fa; letter-spacing: 0.5px; }
+    .nav-controls { display: flex; gap: 10px; align-items: center; }
+    input, select, button { padding: 6px 12px; border-radius: 6px; border: 1px solid #4b5563; background: #374151; color: white; }
+    button { background: #2563eb; border: none; cursor: pointer; font-weight: 600; }
+    button:hover { background: #1d4ed8; }
+    button.green { background: #16a34a; }
+    button.green:hover { background: #15803d; }
 
+    /* Lobby View */
+    #lobby { padding: 30px; max-width: 1000px; margin: 0 auto; }
+    .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; margin-top: 20px; }
+    .game-card { background: #1f2937; border: 1px solid #374151; border-radius: 10px; padding: 16px; display: flex; flex-direction: column; justify-content: space-between; height: 160px; }
+    .game-card h3 { font-size: 1.1rem; margin-bottom: 4px; }
+    .game-meta { font-size: 0.85rem; color: #9ca3af; }
+
+    /* 3D Viewport & HUD */
+    #viewport-container { display: none; position: relative; width: 100vw; height: calc(100vh - 52px); }
+    #studio-toolbar { position: absolute; top: 15px; left: 50%; transform: translateX(-50%); background: rgba(31, 41, 55, 0.92); padding: 10px 16px; border-radius: 8px; display: none; gap: 10px; align-items: center; border: 1px solid #4b5563; }
+    #chat-box { position: absolute; bottom: 15px; left: 15px; width: 320px; background: rgba(17, 24, 39, 0.85); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    #chat-messages { height: 130px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 4px; }
+    #hud-hint { position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 6px; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+  <div id="navbar">
+    <div class="brand">BLOCKVERSE</div>
+    <div class="nav-controls">
+      <input id="username" placeholder="Username" value="Player1" style="width:120px" />
+      <input id="avatarColor" type="color" value="#3b82f6" title="Avatar Color" style="width:40px; padding:2px;" />
+      <button onclick="showLobby()">Games</button>
+      <button class="green" onclick="openStudio()">+ Create (Studio)</button>
+    </div>
+  </div>
+
+  <!-- Game Catalog Lobby -->
+  <div id="lobby">
+    <h2>Discover Experiences</h2>
+    <div class="game-grid" id="game-grid"></div>
+  </div>
+
+  <!-- 3D Engine Container -->
+  <div id="viewport-container">
+    <div id="hud-hint">WASD: Move | Space: Jump | Right-Click Drag: Orbit Camera</div>
+    
+    <!-- Studio Mode Controls -->
+    <div id="studio-toolbar">
+      <input id="gameTitle" placeholder="Game Title..." value="My Obby World" />
+      <input id="blockColor" type="color" value="#ef4444" />
+      <select id="blockType">
+        <option value="solid">Solid Part</option>
+        <option value="kill">Lava / Kill Brick</option>
+      </select>
+      <button onclick="studioAddBlock()">+ Place Part</button>
+      <button onclick="studioClear()">Clear</button>
+      <button class="green" onclick="publishGame()">Publish to Server</button>
+    </div>
+
+    <!-- Multiplayer Chat -->
+    <div id="chat-box">
+      <div id="chat-messages"></div>
+      <input id="chat-input" placeholder="Press Enter to chat..." />
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="engine.js"></script>
+</body>
+</html>
