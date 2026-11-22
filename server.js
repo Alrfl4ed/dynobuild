@@ -79,10 +79,11 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: "Username already taken." });
       }
 
+      // Pass native JS object directly (no JSON.stringify)
       const defaultAvatar = { skin: '#fde047', shirt: '#3b82f6', pants: '#16a34a', hat: 'none', face: 'smile' };
       const insert = await pool.query(
         'INSERT INTO users (username, password, dybux, avatar, badges) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [username, password, 100, JSON.stringify(defaultAvatar), ['og']]
+        [username, password, 100, defaultAvatar, ['og']]
       );
       console.log(`[Auth] Registered new user: '${username}'`);
       return res.json({ success: true, user: insert.rows[0] });
@@ -135,7 +136,8 @@ app.post('/api/avatar', async (req, res) => {
 
   try {
     if (pool) {
-      await pool.query('UPDATE users SET avatar = $1 WHERE LOWER(username) = LOWER($2)', [JSON.stringify(avatar), String(username).trim()]);
+      // Pass avatar object directly
+      await pool.query('UPDATE users SET avatar = $1 WHERE LOWER(username) = LOWER($2)', [avatar || {}, String(username).trim()]);
     }
     res.json({ success: true });
   } catch (err) {
@@ -209,9 +211,10 @@ app.post('/api/games', async (req, res) => {
   const { title, creator, blocks, customCode, thumbColor } = req.body;
   try {
     if (pool) {
+      // Pass blocks array directly (no JSON.stringify)
       const insert = await pool.query(
         'INSERT INTO games (title, creator, blocks, customCode, thumbColor, visits) VALUES ($1, $2, $3, $4, $5, 0) RETURNING id',
-        [title || 'Untitled', creator || 'Builder', JSON.stringify(blocks || []), customCode || '', thumbColor || '#00a2ff']
+        [title || 'Untitled', creator || 'Builder', blocks || [], customCode || '', thumbColor || '#00a2ff']
       );
       return res.json({ success: true, gameId: insert.rows[0].id });
     }
