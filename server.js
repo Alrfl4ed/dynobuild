@@ -17,7 +17,7 @@ const pool = process.env.DATABASE_URL ? new Pool({
   ssl: { rejectUnauthorized: false }
 }) : null;
 
-// Initialize Database Tables and ensure they exist before accepting traffic
+// Initialize Database Tables and patch missing columns safely
 async function initDB() {
   if (!pool) {
     console.log("⚠️ Running in memory-only mode (No DATABASE_URL provided).");
@@ -26,16 +26,19 @@ async function initDB() {
   try {
     const client = await pool.connect();
     try {
+      // 1. Create table if it doesn't exist at all
       await client.query(`
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
-          username VARCHAR(50) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          dybux INTEGER DEFAULT 100,
-          avatar JSONB DEFAULT '{}',
-          badges TEXT[] DEFAULT ARRAY['og']
+          username VARCHAR(50) UNIQUE NOT NULL
         );
       `);
+
+      // 2. Safely add missing columns to existing tables if they were created previously without them
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255);`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS dybux INTEGER DEFAULT 100;`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar JSONB DEFAULT '{}';`);
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS badges TEXT[] DEFAULT ARRAY['og'];`);
 
       await client.query(`
         CREATE TABLE IF NOT EXISTS games (
@@ -245,7 +248,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-// Start server only after database initialization attempt
+// Start server only after database initialization attempt completes
 initDB().then(() => {
   server.listen(PORT, () => {
     console.log(`🚀 DynoBuild server running on port ${PORT}`);
