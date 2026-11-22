@@ -17,42 +17,46 @@ const pool = process.env.DATABASE_URL ? new Pool({
   ssl: { rejectUnauthorized: false }
 }) : null;
 
-// Initialize Database Tables
+// Initialize Database Tables and ensure they exist before accepting traffic
 async function initDB() {
   if (!pool) {
-    console.log("Running in memory-only mode (No DATABASE_URL provided).");
+    console.log("⚠️ Running in memory-only mode (No DATABASE_URL provided).");
     return;
   }
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        dybux INTEGER DEFAULT 100,
-        avatar JSONB DEFAULT '{}',
-        badges TEXT[] DEFAULT ARRAY['og']
-      );
-    `);
+    const client = await pool.connect();
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(50) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          dybux INTEGER DEFAULT 100,
+          avatar JSONB DEFAULT '{}',
+          badges TEXT[] DEFAULT ARRAY['og']
+        );
+      `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS games (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(100) NOT NULL,
-        creator VARCHAR(50) NOT NULL,
-        blocks JSONB DEFAULT '[]',
-        customCode TEXT DEFAULT '',
-        thumbColor VARCHAR(20) DEFAULT '#00a2ff',
-        visits INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log("Neon PostgreSQL database initialized successfully.");
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS games (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(100) NOT NULL,
+          creator VARCHAR(50) NOT NULL,
+          blocks JSONB DEFAULT '[]',
+          customCode TEXT DEFAULT '',
+          thumbColor VARCHAR(20) DEFAULT '#00a2ff',
+          visits INTEGER DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log("✅ Neon PostgreSQL database tables verified/initialized successfully.");
+    } finally {
+      client.release();
+    }
   } catch (err) {
-    console.error("Database initialization error:", err);
+    console.error("❌ Database initialization error:", err.message);
   }
 }
-initDB();
 
 // --- API ROUTES ---
 
@@ -62,7 +66,7 @@ app.post('/api/register', async (req, res) => {
   const password = req.body.password ? String(req.body.password).trim() : '';
   
   if (!username || username.length < 3 || !password) {
-    return res.status(400).json({ success: false, error: "Invalid username or password." });
+    return res.status(400).json({ success: false, error: "Username must be at least 3 characters and password is required." });
   }
 
   try {
@@ -77,13 +81,14 @@ app.post('/api/register', async (req, res) => {
         'INSERT INTO users (username, password, dybux, avatar, badges) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [username, password, 100, JSON.stringify(defaultAvatar), ['og']]
       );
+      console.log(`[Auth] Registered new user: '${username}'`);
       return res.json({ success: true, user: insert.rows[0] });
     } else {
       return res.json({ success: true, user: { username, dybux: 100, avatar: {}, badges: ['og'] } });
     }
   } catch (err) {
     console.error("Register error:", err);
-    res.status(500).json({ success: false, error: "Server database error." });
+    res.status(500).json({ success: false, error: "Database error: " + err.message });
   }
 });
 
@@ -100,7 +105,7 @@ app.post('/api/login', async (req, res) => {
     if (pool) {
       const result = await pool.query('SELECT * FROM users WHERE LOWER(username) = LOWER($1)', [username]);
       if (result.rows.length === 0) {
-        console.log(`[Auth] Login failed: User '${username}' not found in database.`);
+        console.log(`[Auth] Login failed: User '${username}' not found.`);
         return res.status(401).json({ success: false, error: "Incorrect username or password." });
       }
 
@@ -116,7 +121,7 @@ app.post('/api/login', async (req, res) => {
     }
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ success: false, error: "Server database error." });
+    res.status(500).json({ success: false, error: "Database error: " + err.message });
   }
 });
 
@@ -239,6 +244,10 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`DynoBuild server running on port ${PORT}`);
+
+// Start server only after database initialization attempt
+initDB().then(() => {
+  server.listen(PORT, () => {
+    console.log(`🚀 DynoBuild server running on port ${PORT}`);
+  });
 });
